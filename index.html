@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Kobra Hitam — Sistem Operasional Percetakan</title>
+  <title>Kobra Hitam — Sistem Operasional Percetakan (Live Google Sheets)</title>
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -98,11 +98,15 @@
     <!-- Menu 12 Halaman -->
     <nav id="sidebarNav" class="flex-1 overflow-y-auto px-3 py-3 space-y-0.5 text-[13px]"></nav>
 
-    <!-- Tombol Impor Excel Ringkas -->
-    <div class="p-3 border-t border-slate-100 dark:border-slate-800/80 shrink-0">
-      <button onclick="openExcelModal()" class="w-full py-2.5 px-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200/80 dark:border-amber-500/25 text-xs font-semibold flex items-center justify-center gap-2 transition">
-        <i data-lucide="file-spreadsheet" class="w-4 h-4 shrink-0"></i>
-        <span id="sidebarImportText">Impor Excel (83 Barang)</span>
+    <!-- Tombol Sinkronisasi Spreadsheet -->
+    <div class="p-3 border-t border-slate-100 dark:border-slate-800/80 shrink-0 space-y-1.5">
+      <button onclick="syncAllFromSheets(false)" class="w-full py-2 px-3 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-500/25 text-xs font-semibold flex items-center justify-center gap-2 transition shadow-xs">
+        <i data-lucide="refresh-cw" class="w-3.5 h-3.5 shrink-0"></i>
+        <span id="sidebarSyncText">Sinkronkan Sheets Live</span>
+      </button>
+      <button onclick="openExcelModal()" class="w-full py-1 text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center justify-center gap-1.5">
+        <i data-lucide="file-spreadsheet" class="w-3 h-3"></i>
+        <span>Cadangan File Lokal</span>
       </button>
     </div>
   </aside>
@@ -124,9 +128,18 @@
       </div>
 
       <div class="flex items-center gap-2 shrink-0">
+        <!-- Live Google Sheets Sync Status Button -->
+        <button onclick="syncAllFromSheets(false)" id="sheetsSyncBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 transition shadow-xs" title="Klik untuk sinkronkan ulang live dari Google Sheets">
+          <span id="syncDot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span id="sheetsSyncLabel">Google Sheets Live</span>
+        </button>
+        <a href="https://docs.google.com/spreadsheets/d/17fNVMEWJxoCLs941Z1sLtlclAq8dlGCov_-TxW26ZXQ/edit?usp=sharing" target="_blank" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Buka Spreadsheet di Tab Baru">
+          <i data-lucide="external-link" class="w-3.5 h-3.5 text-amber-500"></i>
+          <span>Spreadsheet</span>
+        </a>
         <span id="stockBadge" class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-          <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-          0 Barang
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          83 Barang
         </span>
         <button onclick="go('kasir')" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 text-xs font-semibold hover:opacity-90 transition">
           <i data-lucide="shopping-cart" class="w-3.5 h-3.5"></i>
@@ -166,72 +179,1402 @@
   ========================================================== -->
   <script>
     // -------------------------------------------------------------------------
-    // 1. KONFIGURASI & STATE (LOCALSTORAGE)
+    // 1. KONFIGURASI & STATE (LOCALSTORAGE & LIVE GOOGLE SHEETS)
     // -------------------------------------------------------------------------
     const STORE_KEY = 'kobra_hitam_simple_ui_v2';
+    const DEFAULT_SHEET_URL = 'https://docs.google.com/spreadsheets/d/17fNVMEWJxoCLs941Z1sLtlclAq8dlGCov_-TxW26ZXQ/edit?usp=sharing';
+    const DEFAULT_SHEET_ID = '17fNVMEWJxoCLs941Z1sLtlclAq8dlGCov_-TxW26ZXQ';
 
     const PAGES = [
       { id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard', group: 'Utama', desc: 'Ringkasan omzet, laba, dan kondisi stok' },
       { id: 'kasir', label: 'Kasir', icon: 'shopping-cart', group: 'Utama', desc: 'Transaksi barang & jasa, otomatis potong stok' },
-      { id: 'barang', label: 'Data Barang', icon: 'package', group: 'Inventaris', desc: 'Master 83 barang inventaris & 8 kolom asli Excel' },
+      { id: 'barang', label: 'Harga Dasar (Barang)', icon: 'package', group: 'Inventaris', desc: 'Master 83 barang & 8 kolom dari Google Sheets' },
+      { id: 'belanja', label: 'Belanja & Pengeluaran', icon: 'shopping-bag', group: 'Inventaris', desc: 'Catatan belanja bahan & modal dari tab Belanja' },
       { id: 'stok-masuk', label: 'Stok Masuk', icon: 'package-plus', group: 'Inventaris', desc: 'Catat barang masuk & pembelian ke jurnal' },
       { id: 'stok-keluar', label: 'Stok Keluar', icon: 'package-minus', group: 'Inventaris', desc: 'Mutasi keluar manual, penyesuaian & resep otomatis' },
       { id: 'kategori', label: 'Kategori Barang', icon: 'tags', group: 'Inventaris', desc: 'Kelompok jenis barang percetakan' },
+      { id: 'daftar-harga', label: 'Harga Jasa & Katalog', icon: 'tag', group: 'Produksi', desc: 'Katalog harga jual & breakdown HPP jasa percetakan' },
       { id: 'kalkulator-hpp', label: 'Kalkulator HPP', icon: 'calculator', group: 'Produksi', desc: 'Hitung HPP, Markup, Margin & profit pesanan' },
       { id: 'resep', label: 'Resep Bahan Baku', icon: 'flask-conical', group: 'Produksi', desc: 'Konsumsi bahan baku per unit jasa percetakan' },
-      { id: 'daftar-harga', label: 'Daftar Harga', icon: 'tag', group: 'Produksi', desc: 'Katalog harga jual barang & jasa' },
       { id: 'jurnal', label: 'Jurnal Harian', icon: 'book-open', group: 'Keuangan', desc: 'Catatan otomatis seluruh transaksi & pengeluaran' },
       { id: 'laporan', label: 'Laporan Bulanan', icon: 'bar-chart-3', group: 'Keuangan', desc: 'Laporan harian, mingguan & bulanan terpisah' },
-      { id: 'pengaturan', label: 'Pengaturan', icon: 'settings', group: 'Sistem', desc: 'Identitas usaha, nota 1080×1350 & backup data' },
+      { id: 'pengaturan', label: 'Pengaturan & Sheets', icon: 'settings', group: 'Sistem', desc: 'Identitas usaha, link Google Sheets & backup data' },
     ];
 
-    // 6 Preset Jasa Wajib & HPP Akurat
+    // Master 83 Barang Asli dari Google Sheets (Tab Harga Dasar)
+    function defaultProducts() {
+      return [
+      {
+            "id": "prd_001",
+            "no": 1,
+            "nama": "Amplop Kecil",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "amplop 110L isi 100 Kecil",
+            "stok": 0,
+            "isiKemasan": "100",
+            "hargaBeli": 17450,
+            "hargaBeliSatuan": 175,
+            "hargaJual": 227,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_002",
+            "no": 2,
+            "nama": "Amplop panjang",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "amplop 90pps isi100lembar",
+            "stok": 0,
+            "isiKemasan": "100",
+            "hargaBeli": 18100,
+            "hargaBeliSatuan": 181,
+            "hargaJual": 235,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_003",
+            "no": 3,
+            "nama": "Batray ABC AAA",
+            "tanggalPembelian": "7/21/2025",
+            "deskripsi": "Baterai ABC AAA Hitam isi 12 pcs",
+            "stok": 4,
+            "isiKemasan": "12",
+            "hargaBeli": 26750,
+            "hargaBeliSatuan": 2229,
+            "hargaJual": 2898,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_004",
+            "no": 4,
+            "nama": "Bolpoin Pilot Hitam",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "2box bulpen pilot isi 12x2=24pcs",
+            "stok": 8,
+            "isiKemasan": "24",
+            "hargaBeli": 36000,
+            "hargaBeliSatuan": 1500,
+            "hargaJual": 1950,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_005",
+            "no": 5,
+            "nama": "Buku 36 lembar Bo mtk",
+            "tanggalPembelian": "6/12/2025",
+            "deskripsi": "Buku Garis Best one Campus 36 lembar isi 10",
+            "stok": 5,
+            "isiKemasan": "20",
+            "hargaBeli": 60000,
+            "hargaBeliSatuan": 3000,
+            "hargaJual": 3900,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_006",
+            "no": 6,
+            "nama": "Buku Gambar A4 Okiey",
+            "tanggalPembelian": "7/21/2025",
+            "deskripsi": "Buku Gambar A4 Okiey 5 Pcs",
+            "stok": 9,
+            "isiKemasan": "5",
+            "hargaBeli": 16660,
+            "hargaBeliSatuan": 3332,
+            "hargaJual": 4332,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_007",
+            "no": 7,
+            "nama": "Buku Gambar A4 Sidu",
+            "tanggalPembelian": "7/21/2025",
+            "deskripsi": "Buku Gambar A4 Sidu  10 Pcs",
+            "stok": 1,
+            "isiKemasan": "10",
+            "hargaBeli": 29000,
+            "hargaBeliSatuan": 2900,
+            "hargaJual": 3770,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_008",
+            "no": 8,
+            "nama": "Buku garis 38 Lembar Bo",
+            "tanggalPembelian": "6/12/2025",
+            "deskripsi": "buku best one 38 lembar isi 10",
+            "stok": 0,
+            "isiKemasan": "10",
+            "hargaBeli": 22000,
+            "hargaBeliSatuan": 2200,
+            "hargaJual": 2860,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_009",
+            "no": 9,
+            "nama": "Buku Garis 38 lembar oh",
+            "tanggalPembelian": "6/12/2025",
+            "deskripsi": "buku one heart 38 lembar isi 1o",
+            "stok": 0,
+            "isiKemasan": "10",
+            "hargaBeli": 21000,
+            "hargaBeliSatuan": 2100,
+            "hargaJual": 2730,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_010",
+            "no": 10,
+            "nama": "Buku Garis Sidu 38",
+            "tanggalPembelian": "7/21/2025",
+            "deskripsi": "Buku Garis Sidu 38 lembar 40Pcs @2750",
+            "stok": 24,
+            "isiKemasan": "40",
+            "hargaBeli": 110000,
+            "hargaBeliSatuan": 2750,
+            "hargaJual": 3575,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_011",
+            "no": 11,
+            "nama": "Buku Garis Sidu 58",
+            "tanggalPembelian": "7/21/2025",
+            "deskripsi": "Buku Garis Sidu 58 Halaman pack @42.000 @4.200",
+            "stok": 0,
+            "isiKemasan": "20",
+            "hargaBeli": 84000,
+            "hargaBeliSatuan": 4200,
+            "hargaJual": 5460,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_012",
+            "no": 12,
+            "nama": "Buku Kuarto 100ppl",
+            "tanggalPembelian": "6/11/2025",
+            "deskripsi": "2 box Buku Kuarto 100PPL @19.250 isi 5",
+            "stok": 0,
+            "isiKemasan": "10",
+            "hargaBeli": 38500,
+            "hargaBeliSatuan": 3850,
+            "hargaJual": 5005,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_013",
+            "no": 13,
+            "nama": "Buku Kuarto 200 Glatik",
+            "tanggalPembelian": "6/11/2025",
+            "deskripsi": "2 Box Buku Kuarto 200Glatik @39.750 isi 3",
+            "stok": 2,
+            "isiKemasan": "6",
+            "hargaBeli": 79500,
+            "hargaBeliSatuan": 13250,
+            "hargaJual": 17225,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_014",
+            "no": 14,
+            "nama": "Buku Kuarto 50 Vision",
+            "tanggalPembelian": "6/11/2025",
+            "deskripsi": "1 pack Buku Kuarto 50visior@5.000 isi10",
+            "stok": 5,
+            "isiKemasan": "10",
+            "hargaBeli": 50000,
+            "hargaBeliSatuan": 5000,
+            "hargaJual": 6500,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_015",
+            "no": 15,
+            "nama": "Buku Notes A5 Paperlin",
+            "tanggalPembelian": "7/8/2025",
+            "deskripsi": "Buku Notes A5 Paperline 148x210mm",
+            "stok": 7,
+            "isiKemasan": "10",
+            "hargaBeli": 19500,
+            "hargaBeliSatuan": 1950,
+            "hargaJual": 2535,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_016",
+            "no": 16,
+            "nama": "Bulpoin Hitam Poco",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "bulpen picolo Hitam Isi 12pcs",
+            "stok": 7,
+            "isiKemasan": "12",
+            "hargaBeli": 14500,
+            "hargaBeliSatuan": 1208,
+            "hargaJual": 1571,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_017",
+            "no": 17,
+            "nama": "Bulpoin Hitam Standart",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "bulpen standar Hitam 1 Box isi 12pcs",
+            "stok": 2,
+            "isiKemasan": "12",
+            "hargaBeli": 17500,
+            "hargaBeliSatuan": 1458,
+            "hargaJual": 1896,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_018",
+            "no": 18,
+            "nama": "Bulpoin Hitech joico Hitam",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "1box bulpent hitech joyco Hitam isi 12pcs",
+            "stok": 0,
+            "isiKemasan": "12",
+            "hargaBeli": 25944,
+            "hargaBeliSatuan": 2162,
+            "hargaJual": 2811,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_019",
+            "no": 19,
+            "nama": "Bulpoin Hitech Seco Hitam",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "1box bulpent hitech seco Hitam  isi 12pcs",
+            "stok": 6,
+            "isiKemasan": "12",
+            "hargaBeli": 19000,
+            "hargaBeliSatuan": 1583,
+            "hargaJual": 2058,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_020",
+            "no": 20,
+            "nama": "Clip No1",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "3 clip No1 Rp 1.800",
+            "stok": 1,
+            "isiKemasan": "3",
+            "hargaBeli": 5400,
+            "hargaBeliSatuan": 1800,
+            "hargaJual": 2340,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_021",
+            "no": 21,
+            "nama": "Cutter Kecil",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "cutter kecil 1 renteng isi 12",
+            "stok": 8,
+            "isiKemasan": "12",
+            "hargaBeli": 8000,
+            "hargaBeliSatuan": 667,
+            "hargaJual": 867,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_022",
+            "no": 22,
+            "nama": "Dobel Tape Uk 1\" Nashua",
+            "tanggalPembelian": "7/8/2025",
+            "deskripsi": "Dobel tape 1\" Nashua Top 1",
+            "stok": 2,
+            "isiKemasan": "3",
+            "hargaBeli": 11700,
+            "hargaBeliSatuan": 3900,
+            "hargaJual": 5070,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_023",
+            "no": 23,
+            "nama": "Gunting Benefit",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "1 renteng Gunting Benefit Sc-204 Isi 12",
+            "stok": 2,
+            "isiKemasan": "12",
+            "hargaBeli": 31000,
+            "hargaBeliSatuan": 2583,
+            "hargaJual": 3358,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_024",
+            "no": 24,
+            "nama": "isi cuter besar",
+            "tanggalPembelian": "6/12/2025",
+            "deskripsi": "1 slop isi 12 packs",
+            "stok": 9,
+            "isiKemasan": "12",
+            "hargaBeli": 49632,
+            "hargaBeliSatuan": 4136,
+            "hargaJual": 5377,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_025",
+            "no": 25,
+            "nama": "isi cuter kecil",
+            "tanggalPembelian": "6/12/2025",
+            "deskripsi": "1 slop isi 12 packs",
+            "stok": 9,
+            "isiKemasan": "12",
+            "hargaBeli": 31584,
+            "hargaBeliSatuan": 2632,
+            "hargaJual": 3422,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_026",
+            "no": 26,
+            "nama": "Isi Steples Uk10 pack",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "isi etona isi Staples no10 Isi 20pcs",
+            "stok": 9,
+            "isiKemasan": "20",
+            "hargaBeli": 28000,
+            "hargaBeliSatuan": 1400,
+            "hargaJual": 1820,
+            "kategoriId": "cat_jilid",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_027",
+            "no": 27,
+            "nama": "Isolasi Bening 2\"",
+            "tanggalPembelian": "6/11/2025",
+            "deskripsi": "1Slop Isolasi Bening Isi 6 @4.830",
+            "stok": 2,
+            "isiKemasan": "6",
+            "hargaBeli": 29000,
+            "hargaBeliSatuan": 4833,
+            "hargaJual": 6283,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_028",
+            "no": 28,
+            "nama": "isolasi kecil",
+            "tanggalPembelian": "6/12/2025",
+            "deskripsi": "Isolasi Nachi uk 1/2 inc 1 rill isi 12",
+            "stok": 3,
+            "isiKemasan": "12",
+            "hargaBeli": 10000,
+            "hargaBeliSatuan": 833,
+            "hargaJual": 1083,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_029",
+            "no": 29,
+            "nama": "Kalkulator",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "1 kalkulator 1unit",
+            "stok": 1,
+            "isiKemasan": "1",
+            "hargaBeli": 60000,
+            "hargaBeliSatuan": 60000,
+            "hargaJual": 78000,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_030",
+            "no": 30,
+            "nama": "kertas A4 75g rim",
+            "tanggalPembelian": "6/11/2025",
+            "deskripsi": "1box A4 Paper One 75g @36.000",
+            "stok": 0,
+            "isiKemasan": "5",
+            "hargaBeli": 180000,
+            "hargaBeliSatuan": 36000,
+            "hargaJual": 46800,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_031",
+            "no": 31,
+            "nama": "Kertas A4 80g rim",
+            "tanggalPembelian": "6/11/2025",
+            "deskripsi": "1box A4 Paper One 80g @44.000",
+            "stok": 0,
+            "isiKemasan": "5",
+            "hargaBeli": 220000,
+            "hargaBeliSatuan": 44000,
+            "hargaJual": 57200,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_032",
+            "no": 32,
+            "nama": "Kertas A5 80g",
+            "tanggalPembelian": "7/8/2025",
+            "deskripsi": "Kertas A5 80g Paper one",
+            "stok": 1,
+            "isiKemasan": "500",
+            "hargaBeli": 23500,
+            "hargaBeliSatuan": 47,
+            "hargaJual": 61,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_033",
+            "no": 33,
+            "nama": "Kertas Binder A5 Big Bos",
+            "tanggalPembelian": "7/8/2025",
+            "deskripsi": "Kertas isi binder A5 50lembar Big Boss Campus",
+            "stok": 2,
+            "isiKemasan": "3",
+            "hargaBeli": 9600,
+            "hargaBeliSatuan": 3200,
+            "hargaJual": 4160,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_034",
+            "no": 34,
+            "nama": "Kertas Binder B5 Big Bos",
+            "tanggalPembelian": "7/8/2025",
+            "deskripsi": "Kertas isi binder B5 50lembar  Big Boss Campus",
+            "stok": 2,
+            "isiKemasan": "3",
+            "hargaBeli": 14025,
+            "hargaBeliSatuan": 4675,
+            "hargaJual": 6078,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_035",
+            "no": 35,
+            "nama": "Kertas Buffallow F4 Orange",
+            "tanggalPembelian": "7/17/2025",
+            "deskripsi": "Kertas Bufallow orange F4 Phiton",
+            "stok": 56,
+            "isiKemasan": "100",
+            "hargaBeli": 26500,
+            "hargaBeliSatuan": 265,
+            "hargaJual": 345,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_036",
+            "no": 36,
+            "nama": "Kertas Buffalo Hijau Muda",
+            "tanggalPembelian": "7/17/2025",
+            "deskripsi": "Kertas Bufallow hijau Muda F4 Phiton",
+            "stok": 40,
+            "isiKemasan": "100",
+            "hargaBeli": 26500,
+            "hargaBeliSatuan": 265,
+            "hargaJual": 345,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_037",
+            "no": 37,
+            "nama": "Kertas Buffalow F4 Hijau",
+            "tanggalPembelian": "7/8/2025",
+            "deskripsi": "Kertas Bufallow hijau F4 Oci",
+            "stok": 89,
+            "isiKemasan": "100",
+            "hargaBeli": 32000,
+            "hargaBeliSatuan": 320,
+            "hargaJual": 416,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_038",
+            "no": 38,
+            "nama": "Kertas Buffalow f4 Merah",
+            "tanggalPembelian": "6/12/2025",
+            "deskripsi": "isi 100 warna merah",
+            "stok": 72,
+            "isiKemasan": "100",
+            "hargaBeli": 32000,
+            "hargaBeliSatuan": 320,
+            "hargaJual": 416,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_039",
+            "no": 39,
+            "nama": "Kertas Buffalow Putih",
+            "tanggalPembelian": "8/9/2025",
+            "deskripsi": "1 Box isi 100",
+            "stok": 35,
+            "isiKemasan": "100",
+            "hargaBeli": 20000,
+            "hargaBeliSatuan": 200,
+            "hargaJual": 260,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_040",
+            "no": 40,
+            "nama": "Kertas F4 Rim",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "kertas F4 1rim",
+            "stok": 0,
+            "isiKemasan": "500",
+            "hargaBeli": 42500,
+            "hargaBeliSatuan": 85,
+            "hargaJual": 111,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_041",
+            "no": 41,
+            "nama": "Kertas Folio Garis",
+            "tanggalPembelian": "7/21/2025",
+            "deskripsi": "Keras Folio 200",
+            "stok": 38,
+            "isiKemasan": "200",
+            "hargaBeli": 32000,
+            "hargaBeliSatuan": 160,
+            "hargaJual": 208,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_042",
+            "no": 42,
+            "nama": "Kertas Foto A4 210g",
+            "tanggalPembelian": "7/8/2025",
+            "deskripsi": "Kertas Foto A4 210g 210x297mm type GPP-9110A",
+            "stok": 109,
+            "isiKemasan": "60",
+            "hargaBeli": 33000,
+            "hargaBeliSatuan": 550,
+            "hargaJual": 715,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_043",
+            "no": 43,
+            "nama": "kertas legong",
+            "tanggalPembelian": "8/13/2025",
+            "deskripsi": "kertas legong A4",
+            "stok": 95,
+            "isiKemasan": "100",
+            "hargaBeli": 40000,
+            "hargaBeliSatuan": 400,
+            "hargaJual": 520,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_044",
+            "no": 44,
+            "nama": "Label Harga Kecil",
+            "tanggalPembelian": "6/18/2025",
+            "deskripsi": "label stiker oci isi 10 lembar",
+            "stok": 0,
+            "isiKemasan": "10",
+            "hargaBeli": 5000,
+            "hargaBeliSatuan": 500,
+            "hargaJual": 650,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_045",
+            "no": 45,
+            "nama": "Lakban 1,5 Nachi",
+            "tanggalPembelian": "7/8/2025",
+            "deskripsi": "Lakban 1,5\" Nachi 12meter",
+            "stok": 0,
+            "isiKemasan": "3",
+            "hargaBeli": 25875,
+            "hargaBeliSatuan": 8625,
+            "hargaJual": 11213,
+            "kategoriId": "cat_jilid",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_046",
+            "no": 46,
+            "nama": "Lakban 2\" Nashua",
+            "tanggalPembelian": "7/8/2025",
+            "deskripsi": "Lakban 2\" Nashua 10m",
+            "stok": 0,
+            "isiKemasan": "3",
+            "hargaBeli": 30000,
+            "hargaBeliSatuan": 10000,
+            "hargaJual": 13000,
+            "kategoriId": "cat_jilid",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_047",
+            "no": 47,
+            "nama": "Lakban Hitam 1,5\" Pajero",
+            "tanggalPembelian": "6/11/2025",
+            "deskripsi": "Lakban 1,,5\" 3 roll @7.500",
+            "stok": 3,
+            "isiKemasan": "3",
+            "hargaBeli": 27000,
+            "hargaBeliSatuan": 9000,
+            "hargaJual": 11700,
+            "kategoriId": "cat_jilid",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_048",
+            "no": 48,
+            "nama": "Lakban hitam 2\" pajero",
+            "tanggalPembelian": "6/11/2025",
+            "deskripsi": "Lakaban Pajero 2\" 3roll @10.000",
+            "stok": 3,
+            "isiKemasan": "3",
+            "hargaBeli": 36000,
+            "hargaBeliSatuan": 12000,
+            "hargaJual": 15600,
+            "kategoriId": "cat_jilid",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_049",
+            "no": 49,
+            "nama": "Lem g",
+            "tanggalPembelian": "6/11/2025",
+            "deskripsi": "Lem g Saset Kecil 50pcs",
+            "stok": 22,
+            "isiKemasan": "50",
+            "hargaBeli": 160000,
+            "hargaBeliSatuan": 3200,
+            "hargaJual": 4160,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_050",
+            "no": 50,
+            "nama": "lem Seico Cair 25ml",
+            "tanggalPembelian": "6/11/2025",
+            "deskripsi": "1 Box Lem Seico Water Glue 25Ml 24Pcs @1.250",
+            "stok": 10,
+            "isiKemasan": "24",
+            "hargaBeli": 40000,
+            "hargaBeliSatuan": 1667,
+            "hargaJual": 2167,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_051",
+            "no": 51,
+            "nama": "Map Coklat",
+            "tanggalPembelian": "6/23/2025",
+            "deskripsi": "Map Coklat Lamaran",
+            "stok": 10,
+            "isiKemasan": "10",
+            "hargaBeli": 7500,
+            "hargaBeliSatuan": 750,
+            "hargaJual": 975,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_052",
+            "no": 52,
+            "nama": "Map Jaring",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "3 map jaring",
+            "stok": 3,
+            "isiKemasan": "3",
+            "hargaBeli": 27000,
+            "hargaBeliSatuan": 9000,
+            "hargaJual": 11700,
+            "kategoriId": "cat_jilid",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_053",
+            "no": 53,
+            "nama": "Map kertas",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "2 map kertas Mr Broo isi 50",
+            "stok": 70,
+            "isiKemasan": "50",
+            "hargaBeli": 38000,
+            "hargaBeliSatuan": 760,
+            "hargaJual": 988,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_054",
+            "no": 54,
+            "nama": "Materai 10rb",
+            "tanggalPembelian": "6/23/2025",
+            "deskripsi": "Materai Rp 10.000",
+            "stok": 0,
+            "isiKemasan": "10",
+            "hargaBeli": 100000,
+            "hargaBeliSatuan": 10000,
+            "hargaJual": 13000,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_055",
+            "no": 55,
+            "nama": "Mika Jilid",
+            "tanggalPembelian": "7/21/2025",
+            "deskripsi": "Mika Asahi Jilid 100 Lembar",
+            "stok": 0,
+            "isiKemasan": "100",
+            "hargaBeli": 40000,
+            "hargaBeliSatuan": 400,
+            "hargaJual": 520,
+            "kategoriId": "cat_jilid",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_056",
+            "no": 56,
+            "nama": "Mika Laminating  KTP",
+            "tanggalPembelian": "6/28/2025",
+            "deskripsi": "Laminating Pouch Filem 68.5mm x 97mm",
+            "stok": 27,
+            "isiKemasan": "38",
+            "hargaBeli": 19000,
+            "hargaBeliSatuan": 500,
+            "hargaJual": 650,
+            "kategoriId": "cat_jilid",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_057",
+            "no": 57,
+            "nama": "Mika Laminating F4",
+            "tanggalPembelian": "6/28/2025",
+            "deskripsi": "Laminating Film New Toho 225mm x 340mm",
+            "stok": 17,
+            "isiKemasan": "100",
+            "hargaBeli": 105000,
+            "hargaBeliSatuan": 1100,
+            "hargaJual": 1430,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_058",
+            "no": 58,
+            "nama": "Nota A6 Kiky",
+            "tanggalPembelian": "7/8/2025",
+            "deskripsi": "Nota A6 3ply KIKY 25lembar",
+            "stok": 4,
+            "isiKemasan": "10",
+            "hargaBeli": 34000,
+            "hargaBeliSatuan": 3400,
+            "hargaJual": 4420,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_059",
+            "no": 59,
+            "nama": "Penggaris 15cm",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "penggaris 15cm isi 24",
+            "stok": 20,
+            "isiKemasan": "24",
+            "hargaBeli": 33000,
+            "hargaBeliSatuan": 1375,
+            "hargaJual": 1788,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_060",
+            "no": 60,
+            "nama": "Penggaris 30cm",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "penggaris 30cm isi 12pcs",
+            "stok": 10,
+            "isiKemasan": "12",
+            "hargaBeli": 23000,
+            "hargaBeliSatuan": 1917,
+            "hargaJual": 2492,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_061",
+            "no": 61,
+            "nama": "Penghapus",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "penghapus 1box isi 40",
+            "stok": 21,
+            "isiKemasan": "40",
+            "hargaBeli": 23876,
+            "hargaBeliSatuan": 597,
+            "hargaJual": 776,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_062",
+            "no": 62,
+            "nama": "pensil 2b",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "1box pensil artline  2b isi 12pcs",
+            "stok": 15,
+            "isiKemasan": "12",
+            "hargaBeli": 24000,
+            "hargaBeliSatuan": 2000,
+            "hargaJual": 2600,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_063",
+            "no": 63,
+            "nama": "Plastik",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "plastik fotocopy Isi 950Pcs",
+            "stok": 200,
+            "isiKemasan": "950",
+            "hargaBeli": 60000,
+            "hargaBeliSatuan": 63,
+            "hargaJual": 82,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_064",
+            "no": 64,
+            "nama": "Plong / Punch Joyko",
+            "tanggalPembelian": "7/8/2025",
+            "deskripsi": "plong punch Joyko no 40 XL 2 Holes/lubang",
+            "stok": 2,
+            "isiKemasan": "3",
+            "hargaBeli": 88500,
+            "hargaBeliSatuan": 29500,
+            "hargaJual": 38350,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_065",
+            "no": 65,
+            "nama": "Rautan",
+            "tanggalPembelian": "6/11/2025",
+            "deskripsi": "2bos Roter/Rautan Greebel 24pcs @37.000/box (1.542)",
+            "stok": 39,
+            "isiKemasan": "24",
+            "hargaBeli": 74000,
+            "hargaBeliSatuan": 3083,
+            "hargaJual": 4008,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_066",
+            "no": 66,
+            "nama": "Spidol Hitam",
+            "tanggalPembelian": "6/7/2025",
+            "deskripsi": "sepack spidol  BK Isi 12pcs",
+            "stok": 2,
+            "isiKemasan": "12",
+            "hargaBeli": 77000,
+            "hargaBeliSatuan": 6417,
+            "hargaJual": 8342,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_067",
+            "no": 67,
+            "nama": "Spidol Snowman",
+            "tanggalPembelian": "9/2/2025",
+            "deskripsi": "",
+            "stok": 5,
+            "isiKemasan": "12",
+            "hargaBeli": 78000,
+            "hargaBeliSatuan": 6500,
+            "hargaJual": 8450,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_068",
+            "no": 68,
+            "nama": "stabilo",
+            "tanggalPembelian": "8/13/2025",
+            "deskripsi": "stabilo warna",
+            "stok": 9,
+            "isiKemasan": "12",
+            "hargaBeli": 55500,
+            "hargaBeliSatuan": 4625,
+            "hargaJual": 6013,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_069",
+            "no": 69,
+            "nama": "Steples Kenko HD-10",
+            "tanggalPembelian": "6/11/2025",
+            "deskripsi": "1box Steples kenko HD-10 12Pcs@7.283,33",
+            "stok": 4,
+            "isiKemasan": "12",
+            "hargaBeli": 87400,
+            "hargaBeliSatuan": 7283,
+            "hargaJual": 9468,
+            "kategoriId": "cat_jilid",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_070",
+            "no": 70,
+            "nama": "Stipo roll kertas",
+            "tanggalPembelian": "8/13/2025",
+            "deskripsi": "stipo warna  grebel",
+            "stok": 10,
+            "isiKemasan": "12",
+            "hargaBeli": 45000,
+            "hargaBeliSatuan": 3750,
+            "hargaJual": 4875,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_071",
+            "no": 71,
+            "nama": "Stipo Sico 10 ml",
+            "tanggalPembelian": "6/11/2025",
+            "deskripsi": "1 Box Stipo Sico 12 Pcs 10Ml @2.750",
+            "stok": 7,
+            "isiKemasan": "12",
+            "hargaBeli": 33000,
+            "hargaBeliSatuan": 2750,
+            "hargaJual": 3575,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_072",
+            "no": 72,
+            "nama": "Surat Jalan",
+            "tanggalPembelian": "7/8/2025",
+            "deskripsi": "Surat Jalan A5 2play Best Quality",
+            "stok": 10,
+            "isiKemasan": "10",
+            "hargaBeli": 60000,
+            "hargaBeliSatuan": 6000,
+            "hargaJual": 7800,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_073",
+            "no": 73,
+            "nama": "Tissu multi hijau",
+            "tanggalPembelian": "6/12/2025",
+            "deskripsi": "160 site 2play 2 pcs",
+            "stok": 0,
+            "isiKemasan": "2",
+            "hargaBeli": 9000,
+            "hargaBeliSatuan": 4500,
+            "hargaJual": 5850,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_074",
+            "no": 74,
+            "nama": "Dobel Tape Uk 1\" Nashua",
+            "tanggalPembelian": "5/1/2026",
+            "deskripsi": "dobel tip nashua",
+            "stok": 0,
+            "isiKemasan": "3",
+            "hargaBeli": 10500,
+            "hargaBeliSatuan": 3500,
+            "hargaJual": 4550,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_075",
+            "no": 75,
+            "nama": "mika jilid pop",
+            "tanggalPembelian": "5/1/2026",
+            "deskripsi": "mika jilid pop",
+            "stok": 95,
+            "isiKemasan": "100",
+            "hargaBeli": 28000,
+            "hargaBeliSatuan": 280,
+            "hargaJual": 364,
+            "kategoriId": "cat_jilid",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_076",
+            "no": 76,
+            "nama": "kertas a4",
+            "tanggalPembelian": "5/1/2026",
+            "deskripsi": "kertas a4 sinarline rim",
+            "stok": 3,
+            "isiKemasan": "10",
+            "hargaBeli": 320000,
+            "hargaBeliSatuan": 32000,
+            "hargaJual": 41600,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_077",
+            "no": 77,
+            "nama": "Kertas F4 Rim",
+            "tanggalPembelian": "5/1/2026",
+            "deskripsi": "kertas f4 sinarline 2 rim",
+            "stok": 2,
+            "isiKemasan": "2",
+            "hargaBeli": 79000,
+            "hargaBeliSatuan": 39500,
+            "hargaJual": 51350,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_078",
+            "no": 78,
+            "nama": "stopmap",
+            "tanggalPembelian": "5/1/2026",
+            "deskripsi": "stopmap hijau okey",
+            "stok": 12,
+            "isiKemasan": "12",
+            "hargaBeli": 10000,
+            "hargaBeliSatuan": 833,
+            "hargaJual": 1083,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_079",
+            "no": 79,
+            "nama": "stop map putih",
+            "tanggalPembelian": "5/1/2026",
+            "deskripsi": "stop map putih kiky",
+            "stok": 12,
+            "isiKemasan": "12",
+            "hargaBeli": 11000,
+            "hargaBeliSatuan": 917,
+            "hargaJual": 1192,
+            "kategoriId": "cat_atk",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_080",
+            "no": 80,
+            "nama": "folio garis glatik",
+            "tanggalPembelian": "5/1/2026",
+            "deskripsi": "folio garis glatik",
+            "stok": 200,
+            "isiKemasan": "200",
+            "hargaBeli": 32500,
+            "hargaBeliSatuan": 163,
+            "hargaJual": 211,
+            "kategoriId": "cat_kertas",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_081",
+            "no": 81,
+            "nama": "bulpoint faster",
+            "tanggalPembelian": "7/1/2026",
+            "deskripsi": "bulpoin faster hitam f3",
+            "stok": 4,
+            "isiKemasan": "12",
+            "hargaBeli": 21000,
+            "hargaBeliSatuan": 1750,
+            "hargaJual": 2275,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_082",
+            "no": 82,
+            "nama": "baterai abc besar",
+            "tanggalPembelian": "2/4/2026",
+            "deskripsi": "baterai abc besar",
+            "stok": 4,
+            "isiKemasan": "6",
+            "hargaBeli": 36000,
+            "hargaBeliSatuan": 6000,
+            "hargaJual": 7800,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      },
+      {
+            "id": "prd_083",
+            "no": 83,
+            "nama": "peluit",
+            "tanggalPembelian": "2/4/2026",
+            "deskripsi": "peluit parkir",
+            "stok": 10,
+            "isiKemasan": "12",
+            "hargaBeli": 27500,
+            "hargaBeliSatuan": 2292,
+            "hargaJual": 2979,
+            "kategoriId": "cat_lain",
+            "supplier": "",
+            "aktif": true
+      }
+];
+    }
+
+    // 10 Item Belanja Asli dari Google Sheets (Tab Belanja)
+    function defaultBelanja() {
+      return [
+      {
+            "id": "blj_1",
+            "nama": "batray AA",
+            "qty": 1,
+            "nominal": 0,
+            "biayaSatuan": 0
+      },
+      {
+            "id": "blj_2",
+            "nama": "doble tip nashua",
+            "qty": 3,
+            "nominal": 10500,
+            "biayaSatuan": 3500
+      },
+      {
+            "id": "blj_3",
+            "nama": "mika pop jilid",
+            "qty": 1,
+            "nominal": 28000,
+            "biayaSatuan": 28000
+      },
+      {
+            "id": "blj_4",
+            "nama": "kertas f4 rim",
+            "qty": 2,
+            "nominal": 79000,
+            "biayaSatuan": 39500
+      },
+      {
+            "id": "blj_5",
+            "nama": "kertas a4 rim",
+            "qty": 10,
+            "nominal": 320000,
+            "biayaSatuan": 32000
+      },
+      {
+            "id": "blj_6",
+            "nama": "folio garis glatik",
+            "qty": 200,
+            "nominal": 32500,
+            "biayaSatuan": 163
+      },
+      {
+            "id": "blj_7",
+            "nama": "bulpen standart",
+            "qty": 24,
+            "nominal": 35000,
+            "biayaSatuan": 1458
+      },
+      {
+            "id": "blj_8",
+            "nama": "stop map putih",
+            "qty": 12,
+            "nominal": 11000,
+            "biayaSatuan": 917
+      },
+      {
+            "id": "blj_9",
+            "nama": "stop map hijau",
+            "qty": 12,
+            "nominal": 10000,
+            "biayaSatuan": 833
+      },
+      {
+            "id": "blj_10",
+            "nama": "map ketas coklat",
+            "qty": 10,
+            "nominal": 7500,
+            "biayaSatuan": 750
+      }
+];
+    }
+
+    // 6 Preset Jasa Wajib & HPP Akurat (Terkalibrasi dari Tab Harga Jasa)
     function defaultServices() {
       return [
         {
           id: 'svc_fotokopi', nama: 'Fotokopi', satuan: 'lembar', aktif: true,
-          bahanItems: [{ id: 'b1', nama: 'Kertas HVS A4/F4', biaya: 130 }, { id: 'b2', nama: 'Toner Fotokopi', biaya: 70 }],
-          listrik: 50, jasa: 50, // HPP = Rp300
+          bahanItems: [{ id: 'b1', nama: 'kertas a4 80g', biaya: 110 }, { id: 'b2', nama: 'TOONER/halaman', biaya: 25 }],
+          listrik: 2, jasa: 163, // HPP = Rp300
           markupPct: 66.67, marginPct: 40, hargaJual: 500,
           resep: [{ id: 'r1', label: 'Kertas HVS', keyword: 'hvs', productId: '', qtyPerUnit: 1 }]
         },
         {
           id: 'svc_print_bw', nama: 'Print Hitam Putih', satuan: 'lembar', aktif: true,
-          bahanItems: [{ id: 'b1', nama: 'Kertas HVS A4/F4', biaya: 130 }, { id: 'b2', nama: 'Tinta Hitam', biaya: 140 }],
-          listrik: 60, jasa: 70, // HPP = Rp400
+          bahanItems: [{ id: 'b1', nama: 'kertas a4 80g', biaya: 110 }, { id: 'b2', nama: 'tinta/halaman', biaya: 80 }],
+          listrik: 21, jasa: 189, // HPP = Rp400
           markupPct: 150, marginPct: 60, hargaJual: 1000,
           resep: [{ id: 'r1', label: 'Kertas HVS', keyword: 'hvs', productId: '', qtyPerUnit: 1 }]
         },
         {
           id: 'svc_print_warna', nama: 'Print Warna', satuan: 'lembar', aktif: true,
-          bahanItems: [{ id: 'b1', nama: 'Kertas HVS A4/F4', biaya: 130 }, { id: 'b2', nama: 'Tinta CMYK Warna', biaya: 390 }],
-          listrik: 80, jasa: 100, // HPP = Rp700
+          bahanItems: [{ id: 'b1', nama: 'kertas a4 80g', biaya: 110 }, { id: 'b2', nama: 'tinta/halaman', biaya: 320 }],
+          listrik: 42, jasa: 228, // HPP = Rp700
           markupPct: 185.71, marginPct: 65, hargaJual: 2000,
           resep: [{ id: 'r1', label: 'Kertas HVS', keyword: 'hvs', productId: '', qtyPerUnit: 1 }]
         },
         {
           id: 'svc_jilid', nama: 'Jilid', satuan: 'buku', aktif: true,
-          bahanItems: [{ id: 'b1', nama: 'Cover Buffalo', biaya: 700 }, { id: 'b2', nama: 'Plastik Mika', biaya: 620 }, { id: 'b3', nama: 'Lakban & Staples', biaya: 400 }],
-          listrik: 100, jasa: 500, // HPP = Rp2.320
+          bahanItems: [{ id: 'b1', nama: 'Kertas bufalo', biaya: 2000 }, { id: 'b2', nama: 'tinta', biaya: 320 }, { id: 'b3', nama: 'steples', biaya: 68 }, { id: 'b4', nama: 'Lagband', biaya: 375 }],
+          listrik: 0, jasa: 0, // HPP = Rp2.320
           markupPct: 115.52, marginPct: 53.6, hargaJual: 5000,
           resep: [
-            { id: 'r1', label: 'Cover Buffalo', keyword: 'buffalo', productId: '', qtyPerUnit: 1 },
+            { id: 'r1', label: 'Cover Buffalo', keyword: 'bufalo', productId: '', qtyPerUnit: 1 },
             { id: 'r2', label: 'Plastik Mika', keyword: 'mika', productId: '', qtyPerUnit: 1 }
           ]
         },
         {
           id: 'svc_lam_f4', nama: 'Laminating F4', satuan: 'lembar', aktif: true,
-          bahanItems: [{ id: 'b1', nama: 'Plastik Laminating F4', biaya: 6820 }],
-          listrik: 500, jasa: 1000, // HPP = Rp8.320
+          bahanItems: [{ id: 'b1', nama: 'mika f4', biaya: 7000 }],
+          listrik: 320, jasa: 1000, // HPP = Rp8.320
           markupPct: 44.23, marginPct: 30.67, hargaJual: 12000,
-          resep: [{ id: 'r1', label: 'Plastik Laminating F4', keyword: 'laminating f4', productId: '', qtyPerUnit: 1 }]
+          resep: [{ id: 'r1', label: 'mika f4', keyword: 'f4', productId: '', qtyPerUnit: 1 }]
         },
         {
           id: 'svc_lam_a4', nama: 'Laminating A4', satuan: 'lembar', aktif: true,
-          bahanItems: [{ id: 'b1', nama: 'Plastik Laminating A4', biaya: 4020 }],
-          listrik: 400, jasa: 900, // HPP = Rp5.320
+          bahanItems: [{ id: 'b1', nama: 'mika A4', biaya: 4000 }],
+          listrik: 320, jasa: 1000, // HPP = Rp5.320
           markupPct: 50.38, marginPct: 33.5, hargaJual: 8000,
-          resep: [{ id: 'r1', label: 'Plastik Laminating A4', keyword: 'laminating a4', productId: '', qtyPerUnit: 1 }]
+          resep: [{ id: 'r1', label: 'mika A4', keyword: 'a4', productId: '', qtyPerUnit: 1 }]
         }
       ];
     }
@@ -259,12 +1602,15 @@
           invoicePrefix: 'KH',
           invoiceCounter: 1,
           lowStockThreshold: 10,
-          darkMode: false
+          darkMode: false,
+          spreadsheetUrl: DEFAULT_SHEET_URL,
+          autoSyncOnOpen: true,
+          lastSync: null
         },
         categories: defaultCategories(),
-        // Dikosongkan agar tidak mengarang data; seluruh 83 barang asli diimpor langsung dari Excel Anda.
-        products: [],
+        products: defaultProducts(),
         services: defaultServices(),
+        belanja: defaultBelanja(),
         stockMovements: [],
         sales: [],
         journal: []
@@ -287,16 +1633,16 @@
 
     function loadState() {
       try {
-        // Migrasi otomatis bila user sebelumnya sudah impor data di versi v1
         const raw = localStorage.getItem(STORE_KEY) || localStorage.getItem('kobra_hitam_operasional_v1');
-        if (!raw) return defaultState();
-        const p = JSON.parse(raw);
         const d = defaultState();
+        if (!raw) return d;
+        const p = JSON.parse(raw);
         return {
           settings: { ...d.settings, ...(p.settings || {}) },
           categories: p.categories?.length ? p.categories : d.categories,
-          products: Array.isArray(p.products) ? p.products : [],
-          services: p.services?.length ? p.services : d.services,
+          products: Array.isArray(p.products) && p.products.length ? p.products : d.products,
+          services: Array.isArray(p.services) && p.services.length ? p.services : d.services,
+          belanja: Array.isArray(p.belanja) && p.belanja.length ? p.belanja : d.belanja,
           stockMovements: Array.isArray(p.stockMovements) ? p.stockMovements : [],
           sales: Array.isArray(p.sales) ? p.sales : [],
           journal: Array.isArray(p.journal) ? p.journal : []
@@ -312,6 +1658,163 @@
         updateBadges();
       } catch {
         toast('Penyimpanan browser penuh. Silakan backup data di Pengaturan.', 'error');
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. MESIN SINKRONISASI GOOGLE SPREADSHEET LIVE (HARGA DASAR, JASA, BELANJA)
+    // -------------------------------------------------------------------------
+    function extractSheetId(url) {
+      if (!url) return DEFAULT_SHEET_ID;
+      const m = String(url).match(/\/d\/([a-zA-Z0-9_-]+)/);
+      return m ? m[1] : DEFAULT_SHEET_ID;
+    }
+
+    function fetchGvizJsonp(sheetId, sheetName) {
+      return new Promise((resolve, reject) => {
+        const cbName = 'gviz_cb_' + Math.random().toString(36).substring(2, 9);
+        const script = document.createElement('script');
+        const timeout = setTimeout(() => {
+          cleanup();
+          reject(new Error('Koneksi ke Google Sheets timeout (15 detik).'));
+        }, 15000);
+
+        function cleanup() {
+          clearTimeout(timeout);
+          delete window[cbName];
+          if (script.parentNode) script.parentNode.removeChild(script);
+        }
+
+        window[cbName] = function(response) {
+          cleanup();
+          if (response && response.status === 'ok' && response.table) {
+            resolve(response.table);
+          } else {
+            reject(new Error(response?.errors?.[0]?.message || 'Gagal memproses spreadsheet'));
+          }
+        };
+
+        script.onerror = function() {
+          cleanup();
+          reject(new Error('Tidak dapat terhubung ke Google Sheets'));
+        };
+
+        const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?sheet=${encodeURIComponent(sheetName)}&tqx=responseHandler:${cbName}`;
+        script.src = url;
+        document.head.appendChild(script);
+      });
+    }
+
+    let isSyncingSheets = false;
+
+    async function syncAllFromSheets(silent = false) {
+      if (isSyncingSheets) return;
+      isSyncingSheets = true;
+      const sheetId = extractSheetId(state.settings.spreadsheetUrl);
+
+      const dot = document.getElementById('syncDot');
+      const label = document.getElementById('sheetsSyncLabel');
+      const sideText = document.getElementById('sidebarSyncText');
+
+      if (dot) dot.className = 'w-2 h-2 rounded-full bg-amber-500 animate-ping';
+      if (label) label.textContent = 'Menyinkronkan...';
+      if (sideText) sideText.textContent = 'Menyinkronkan...';
+      if (!silent) toast('Menghubungkan ke Google Spreadsheet Kobra Hitam...', 'info');
+
+      try {
+        // 1. Ambil Harga Dasar (83 Barang)
+        const tableDasar = await fetchGvizJsonp(sheetId, 'Harga Dasar');
+        const newProducts = [];
+        tableDasar.rows.forEach(r => {
+          const c = r.c || [];
+          const cell = i => (c[i] ? (c[i].f !== undefined && c[i].f !== null ? c[i].f : c[i].v) : '') || '';
+          const no = String(cell(0)).trim();
+          const tgl = String(cell(1)).trim();
+          const nama = String(cell(2)).trim() || String(cell(3)).trim();
+          const deskripsi = String(cell(3)).trim();
+          const stok = parseIndoNum(cell(4));
+          const isiKemasan = String(cell(5)).trim();
+          const hargaBeli = parseIndoNum(cell(6));
+          const hargaBeliSatuan = parseIndoNum(cell(7));
+          const hargaJual = parseIndoNum(cell(8));
+          const supplier = String(cell(12)).trim();
+
+          if (nama && no && !isNaN(parseInt(no, 10))) {
+            const noInt = parseInt(no, 10);
+            const exist = state.products.find(p => p.nama.toLowerCase() === nama.toLowerCase() || p.no === noInt);
+            newProducts.push({
+              id: exist?.id || `prd_${String(noInt).padStart(3, '0')}`,
+              no: noInt,
+              nama,
+              tanggalPembelian: tgl || exist?.tanggalPembelian || '',
+              deskripsi,
+              stok: isFinite(stok) ? stok : (exist?.stok || 0),
+              isiKemasan,
+              hargaBeli,
+              hargaBeliSatuan,
+              hargaJual,
+              kategoriId: guessCat(nama, deskripsi),
+              supplier,
+              aktif: true
+            });
+          }
+        });
+
+        if (newProducts.length > 0) {
+          state.products = newProducts;
+        }
+
+        // 2. Ambil Belanja (Pengadaan Bahan)
+        try {
+          const tableBelanja = await fetchGvizJsonp(sheetId, 'Belanja');
+          const newBelanja = [];
+          tableBelanja.rows.slice(1).forEach((r, idx) => {
+            const c = r.c || [];
+            const cell = i => (c[i] ? (c[i].f !== undefined && c[i].f !== null ? c[i].f : c[i].v) : '') || '';
+            const ket = String(cell(4)).trim();
+            const qty = parseIndoNum(cell(5));
+            const nominal = parseIndoNum(cell(10));
+            if (ket) {
+              newBelanja.push({
+                id: `blj_${idx + 1}`,
+                nama: ket,
+                qty: qty || 1,
+                nominal: nominal || 0,
+                biayaSatuan: qty > 0 ? Math.round(nominal / qty) : nominal
+              });
+            }
+          });
+          if (newBelanja.length > 0) state.belanja = newBelanja;
+        } catch (eBelanja) {
+          console.warn('Gagal memuat tab Belanja:', eBelanja);
+        }
+
+        // 3. Kalibrasi Resep Jasa
+        autoLinkRecipes();
+
+        state.settings.lastSync = new Date().toISOString();
+        save();
+        updateBadges();
+        renderNav();
+        render();
+
+        if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+        if (label) label.textContent = 'Sheets Terhubung';
+        if (sideText) sideText.textContent = `Sinkronkan Sheets (${state.products.length})`;
+
+        if (!silent) {
+          toast(`Berhasil sinkronkan ${state.products.length} Barang & ${state.belanja?.length || 0} Belanja dari Google Sheets!`);
+        }
+      } catch (err) {
+        console.error('Sync error:', err);
+        if (dot) dot.className = 'w-2 h-2 rounded-full bg-amber-500';
+        if (label) label.textContent = 'Mode Offline (Lokal)';
+        if (sideText) sideText.textContent = 'Sinkronkan Sheets';
+        if (!silent) {
+          toast('Gagal terhubung ke Google Sheets: ' + err.message + '. Menggunakan data lokal.', 'warning');
+        }
+      } finally {
+        isSyncingSheets = false;
       }
     }
 
@@ -420,14 +1923,18 @@
       const c = state.products.length;
       const b = document.getElementById('stockBadge');
       if (b) b.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${c > 0 ? 'bg-emerald-500' : 'bg-amber-500'}"></span>${c} Barang`;
-      const t = document.getElementById('sidebarImportText');
-      if (t) t.textContent = c > 0 ? `Update Excel (${c} Item)` : 'Impor Excel (83 Barang)';
+      const t = document.getElementById('sidebarSyncText');
+      if (t) t.textContent = c > 0 ? `Sinkronkan Sheets (${c})` : 'Sinkronkan Sheets Live';
       const bn = document.getElementById('brandName');
       if (bn) bn.textContent = state.settings.shopName.replace(/^PERCETAKAN\s+/i, '') || 'Kobra Hitam';
     }
 
+    // -------------------------------------------------------------------------
+    // 3. NAVIGASI SIDEBAR & RENDER HALAMAN
+    // -------------------------------------------------------------------------
     function renderNav() {
       const nav = document.getElementById('sidebarNav');
+      if (!nav) return;
       const groups = [...new Set(PAGES.map(p => p.group))];
       nav.innerHTML = groups.map((g, idx) => `
         <div class="${idx ? 'mt-4' : ''} mb-1 px-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">${g}</div>
@@ -452,8 +1959,10 @@
       page = id;
       toggleSidebar(false);
       const p = PAGES.find(x => x.id === id) || PAGES[0];
-      document.getElementById('pageTitle').textContent = p.label;
-      document.getElementById('pageDesc').textContent = p.desc;
+      const pTitle = document.getElementById('pageTitle');
+      const pDesc = document.getElementById('pageDesc');
+      if (pTitle) pTitle.textContent = p.label;
+      if (pDesc) pDesc.textContent = p.desc;
       renderNav();
       render();
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -461,11 +1970,13 @@
 
     function render() {
       const root = document.getElementById('app');
+      if (!root) return;
       try {
         const map = {
           'dashboard': viewDashboard,
           'kasir': viewKasir,
           'barang': viewBarang,
+          'belanja': viewBelanja,
           'stok-masuk': viewStokMasuk,
           'stok-keluar': viewStokKeluar,
           'kategori': viewKategori,
@@ -1510,6 +3021,273 @@
     // -------------------------------------------------------------------------
     // 10. HALAMAN 4 & 5: STOK MASUK & STOK KELUAR
     // -------------------------------------------------------------------------
+    
+    // -------------------------------------------------------------------------
+    // VIEW: BELANJA & PENGADAAN BAHAN (TAB BELANJA GOOGLE SHEETS)
+    // -------------------------------------------------------------------------
+    function viewBelanja(el) {
+      const belanjaList = state.belanja || [];
+      const totalPengeluaran = belanjaList.reduce((acc, b) => acc + (Number(b.nominal) || 0), 0);
+      const totalItem = belanjaList.length;
+      const totalQty = belanjaList.reduce((acc, b) => acc + (Number(b.qty) || 0), 0);
+
+      el.innerHTML = `
+        <div class="space-y-5">
+          <!-- Header & Aksi -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 class="text-lg font-bold text-slate-900 dark:text-white">Belanja & Pengeluaran Bahan</h2>
+                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                  Tab Belanja Live
+                </span>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">Catatan pengadaan dan belanja bahan percetakan dari Google Spreadsheet Kobra Hitam</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="syncAllFromSheets(false)" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-2 shadow-xs transition">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                <span>Sinkronkan Ulang</span>
+              </button>
+              <button onclick="openAddBelanjaModal()" class="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 text-xs font-bold flex items-center gap-2 shadow-xs transition">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span>Catat Belanja Baru</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Ringkasan Kartu -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <div class="p-4 rounded-2xl bg-white dark:bg-[#111623] border border-slate-200/80 dark:border-slate-800 shadow-xs">
+              <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Belanja Tercatat</div>
+              <div class="text-xl font-extrabold text-slate-900 dark:text-white mt-1 font-mono">${rp(totalPengeluaran)}</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">${totalItem} pos pengadaan bahan</div>
+            </div>
+            <div class="p-4 rounded-2xl bg-white dark:bg-[#111623] border border-slate-200/80 dark:border-slate-800 shadow-xs">
+              <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Kuantitas Masuk</div>
+              <div class="text-xl font-extrabold text-amber-600 dark:text-amber-400 mt-1 font-mono">${num(totalQty, 0)} Unit / Pack</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">Akumulasi seluruh barang masuk</div>
+            </div>
+            <div class="p-4 rounded-2xl bg-white dark:bg-[#111623] border border-slate-200/80 dark:border-slate-800 shadow-xs">
+              <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Sumber Database</div>
+              <div class="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1.5">
+                <i data-lucide="sheet" class="w-4 h-4"></i> Tab "Belanja" (Spreadsheet)
+              </div>
+              <a href="${esc(state.settings.spreadsheetUrl || DEFAULT_SHEET_URL)}" target="_blank" class="text-[11px] text-sky-500 hover:underline inline-flex items-center gap-1 mt-0.5">
+                Buka link spreadsheet <i data-lucide="external-link" class="w-3 h-3"></i>
+              </a>
+            </div>
+          </div>
+
+          <!-- Tabel Belanja -->
+          <div class="bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden shadow-xs">
+            <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">Daftar Belanja & Pengadaan Masuk</div>
+              <span class="text-xs text-slate-400 font-mono">${totalItem} barang</span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50 dark:bg-slate-900/60 text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                  <tr>
+                    <th class="py-3 px-4 font-semibold">#</th>
+                    <th class="py-3 px-4 font-semibold">Keterangan / Nama Barang Belanja</th>
+                    <th class="py-3 px-4 font-semibold text-center">Kuantitas</th>
+                    <th class="py-3 px-4 font-semibold text-right">Total Biaya (Pengeluaran)</th>
+                    <th class="py-3 px-4 font-semibold text-right">Estimasi Modal Satuan</th>
+                    <th class="py-3 px-4 font-semibold text-center">Status di Master Barang</th>
+                    <th class="py-3 px-4 font-semibold text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-800/80">
+                  ${belanjaList.map((b, idx) => {
+                    const matchProd = state.products.find(p => p.nama.toLowerCase().includes(b.nama.toLowerCase()) || b.nama.toLowerCase().includes(p.nama.toLowerCase()));
+                    return `
+                      <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition">
+                        <td class="py-3 px-4 font-mono text-slate-400">${idx + 1}</td>
+                        <td class="py-3 px-4 font-semibold text-slate-800 dark:text-slate-100">${esc(b.nama)}</td>
+                        <td class="py-3 px-4 text-center font-mono font-bold text-amber-600 dark:text-amber-400">${b.qty}</td>
+                        <td class="py-3 px-4 text-right font-mono font-bold text-rose-600 dark:text-rose-400">${rp(b.nominal)}</td>
+                        <td class="py-3 px-4 text-right font-mono text-slate-600 dark:text-slate-300">${b.biayaSatuan > 0 ? rp(b.biayaSatuan) : '-'}</td>
+                        <td class="py-3 px-4 text-center">
+                          ${matchProd ? `
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300" title="Cocok dengan ${esc(matchProd.nama)}">
+                              <i data-lucide="check" class="w-3 h-3"></i> ${esc(matchProd.nama)}
+                            </span>
+                          ` : `
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                              Item Mandiri
+                            </span>
+                          `}
+                        </td>
+                        <td class="py-3 px-4 text-center">
+                          <button onclick="masukkanBelanjaKeStok('${b.id}')" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-[11px] font-semibold transition shadow-2xs" title="Tambahkan ke Stok Masuk & Jurnal">
+                            + Masuk Stok
+                          </button>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function masukkanBelanjaKeStok(belanjaId) {
+      const b = (state.belanja || []).find(x => x.id === belanjaId);
+      if (!b) return toast('Item belanja tidak ditemukan.', 'error');
+      const matchProd = state.products.find(p => p.nama.toLowerCase().includes(b.nama.toLowerCase()) || b.nama.toLowerCase().includes(p.nama.toLowerCase()));
+      
+      openModal({
+        title: 'Catat Stok Masuk dari Belanja',
+        sub: `Pengadaan: ${b.nama} (Kuantitas: ${b.qty}, Total: ${rp(b.nominal)})`,
+        width: 'max-w-md',
+        body: `
+          <form id="formBelanjaMasuk" onsubmit="submitBelanjaMasuk(event, '${b.id}')" class="space-y-3 text-xs">
+            <div>
+              <label class="block font-semibold mb-1">Barang di Master Inventaris</label>
+              <select name="productId" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900" required>
+                ${state.products.map(p => `
+                  <option value="${p.id}" ${matchProd?.id === p.id ? 'selected' : ''}>${esc(p.nama)} (Stok saat ini: ${num(p.stok)})</option>
+                `).join('')}
+              </select>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block font-semibold mb-1">Kuantitas Masuk</label>
+                <input name="qty" type="number" step="any" min="0.01" value="${b.qty}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900" required />
+              </div>
+              <div>
+                <label class="block font-semibold mb-1">Total Biaya (Rp)</label>
+                <input name="totalCost" type="number" value="${b.nominal}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900" required />
+              </div>
+            </div>
+            <div>
+              <label class="block font-semibold mb-1">Keterangan / Referensi</label>
+              <input name="notes" value="Belanja Spreadsheet: ${esc(b.nama)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900" />
+            </div>
+            <div class="pt-2 flex justify-end gap-2">
+              <button type="button" onclick="closeModal()" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700">Batal</button>
+              <button type="submit" class="px-4 py-2 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 font-bold">Simpan ke Stok & Jurnal</button>
+            </div>
+          </form>
+        `
+      });
+    }
+
+    function submitBelanjaMasuk(e, belanjaId) {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const pid = fd.get('productId');
+      const qty = parseFloat(fd.get('qty')) || 0;
+      const totalCost = parseFloat(fd.get('totalCost')) || 0;
+      const notes = String(fd.get('notes') || '').trim();
+
+      const p = state.products.find(x => x.id === pid);
+      if (!p) return toast('Produk tidak ditemukan.', 'error');
+
+      const bef = Number(p.stok) || 0;
+      const aft = Number((bef + qty).toFixed(4));
+      p.stok = aft;
+      if (qty > 0 && totalCost > 0) {
+        p.hargaBeliSatuan = Math.round(totalCost / qty);
+      }
+
+      const now = new Date().toISOString();
+      state.stockMovements.unshift({
+        id: uid('mov'),
+        date: now,
+        type: 'in',
+        source: 'belanja_spreadsheet',
+        productId: p.id,
+        productName: p.nama,
+        qty,
+        stockBefore: bef,
+        stockAfter: aft,
+        unitCost: qty > 0 ? totalCost / qty : 0,
+        totalCost,
+        refNo: 'BLJ-' + todayISO().replace(/-/g, ''),
+        notes
+      });
+
+      addJournal({
+        type: 'Stok Masuk',
+        refNo: 'BLJ-' + todayISO().replace(/-/g, ''),
+        description: `Belanja stok masuk: ${p.nama} (+${qty})`,
+        amount: totalCost,
+        direction: 'out',
+        date: now
+      });
+
+      save();
+      closeModal();
+      toast(`Stok ${p.nama} bertambah +${qty}. Jurnal kas keluar dicatat.`);
+      render();
+    }
+
+    function openAddBelanjaModal() {
+      openModal({
+        title: 'Tambah Catatan Belanja Bahan',
+        sub: 'Catatan pengeluaran belanja bahan percetakan',
+        width: 'max-w-md',
+        body: `
+          <form onsubmit="submitNewBelanja(event)" class="space-y-3 text-xs">
+            <div>
+              <label class="block font-semibold mb-1">Keterangan / Nama Barang Belanja *</label>
+              <input name="nama" placeholder="Contoh: Kertas Foto Glossy 230g" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900" required />
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block font-semibold mb-1">Kuantitas</label>
+                <input name="qty" type="number" step="any" min="1" value="1" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900" required />
+              </div>
+              <div>
+                <label class="block font-semibold mb-1">Total Biaya (Rp) *</label>
+                <input name="nominal" type="number" placeholder="Contoh: 45000" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900" required />
+              </div>
+            </div>
+            <div class="pt-2 flex justify-end gap-2">
+              <button type="button" onclick="closeModal()" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700">Batal</button>
+              <button type="submit" class="px-4 py-2 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 font-bold">Simpan Belanja</button>
+            </div>
+          </form>
+        `
+      });
+    }
+
+    function submitNewBelanja(e) {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const nama = String(fd.get('nama') || '').trim();
+      const qty = parseFloat(fd.get('qty')) || 1;
+      const nominal = parseFloat(fd.get('nominal')) || 0;
+
+      if (!state.belanja) state.belanja = [];
+      state.belanja.unshift({
+        id: uid('blj'),
+        nama,
+        qty,
+        nominal,
+        biayaSatuan: qty > 0 ? Math.round(nominal / qty) : nominal
+      });
+
+      addJournal({
+        type: 'Pengeluaran',
+        refNo: 'BLJ-' + todayISO().replace(/-/g, ''),
+        description: `Belanja bahan: ${nama} (x${qty})`,
+        amount: nominal,
+        direction: 'out',
+        date: new Date().toISOString()
+      });
+
+      save();
+      closeModal();
+      toast(`Catatan belanja ${nama} tersimpan.`);
+      render();
+    }
+
     function viewStokMasuk(el) {
       const list = state.stockMovements.filter(m => m.type === 'in');
       el.innerHTML = `
@@ -2058,7 +3836,49 @@
       const s = state.settings;
       el.innerHTML = `
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-          <form onsubmit="saveSettings(event)" class="lg:col-span-7 bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 space-y-3.5 text-xs">
+          <!-- Kotak Integrasi Google Spreadsheet Utama -->
+          <div class="lg:col-span-12 bg-white dark:bg-[#111623] rounded-2xl border border-emerald-200/80 dark:border-emerald-800/60 p-5 space-y-3.5 text-xs shadow-xs">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold shrink-0">
+                  <i data-lucide="sheet" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h3 class="text-sm font-bold text-slate-900 dark:text-white">Database Utama: Google Spreadsheet Kobra Hitam</h3>
+                  <p class="text-slate-400 text-[11px] mt-0.5">Terhubung langsung ke Tab <b>Harga Dasar</b> (83 Barang), <b>Harga Jasa</b>, dan <b>Belanja</b></p>
+                </div>
+              </div>
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 shrink-0">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                Tersinkronisasi Otomatis
+              </span>
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="block font-semibold text-slate-700 dark:text-slate-300">Tautan (URL) Google Spreadsheet</label>
+              <div class="flex flex-col sm:flex-row gap-2">
+                <input id="cfgSheetUrl" value="${esc(s.spreadsheetUrl || DEFAULT_SHEET_URL)}" class="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-xs" />
+                <button onclick="updateSheetUrl()" class="px-4 py-2 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 font-bold shrink-0">Simpan URL</button>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 pt-1">
+              <button onclick="syncAllFromSheets(false)" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-2 shadow-xs transition">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Sinkronkan Data Sekarang
+              </button>
+              <a href="${esc(s.spreadsheetUrl || DEFAULT_SHEET_URL)}" target="_blank" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1.5 transition">
+                <i data-lucide="external-link" class="w-3.5 h-3.5 text-amber-500"></i> Buka Google Spreadsheet di Tab Baru
+              </a>
+              <button onclick="resetDefaultSheetUrl()" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-[11px] transition">
+                Kembalikan Link Awal
+              </button>
+            </div>
+            <div class="text-[11px] text-slate-400 pt-1">
+              Setiap kali Anda membuka web ini, data harga dasar, harga jasa, dan belanja langsung diperbarui otomatis dari spreadsheet di atas tanpa perlu mengimpor file manual lagi.
+            </div>
+          </div>
+
+          <form onsubmit="saveSettings(event)" class="lg:col-span-7 bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 space-y-3.5 text-xs shadow-xs">
             <h3 class="text-sm font-bold">Profil Usaha & Header Nota 1080×1350</h3>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div class="sm:col-span-2"><label class="block font-semibold mb-1">Nama Percetakan</label><input name="shopName" value="${esc(s.shopName)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
@@ -2073,20 +3893,38 @@
             <button type="submit" class="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 font-bold">Simpan Pengaturan</button>
           </form>
 
-          <div class="lg:col-span-5 bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 space-y-3 text-xs">
-            <h3 class="text-sm font-bold">Data & Cadangan (Backup)</h3>
-            <button onclick="openExcelModal()" class="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold flex items-center justify-center gap-2"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Impor Excel Inventaris</button>
+          <div class="lg:col-span-5 bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 space-y-3 text-xs shadow-xs">
+            <h3 class="text-sm font-bold">Cadangan Lokal (Offline Backup)</h3>
             <button onclick="backupJSON()" class="w-full py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800"><i data-lucide="download" class="w-4 h-4"></i> Backup Semua Data (.json)</button>
             <label class="w-full py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer">
               <i data-lucide="upload" class="w-4 h-4"></i> Pulihkan Backup (.json)
               <input type="file" accept=".json" class="hidden" onchange="if(this.files[0]) restoreJSON(this.files[0])" />
             </label>
+            <button onclick="openExcelModal()" class="w-full py-2.5 px-4 rounded-xl border border-amber-300 dark:border-amber-600/50 bg-amber-50/50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 font-semibold flex items-center justify-center gap-2"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Impor Alternatif File Excel Lokal</button>
             <div class="pt-3 border-t border-slate-100 dark:border-slate-800">
               <button onclick="resetAllData()" class="w-full py-2.5 px-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 font-bold hover:bg-rose-100">Reset Seluruh Data Aplikasi</button>
             </div>
           </div>
         </div>
       `;
+    }
+
+    function updateSheetUrl() {
+      const url = (document.getElementById('cfgSheetUrl')?.value || '').trim();
+      if (!url) return toast('Masukkan URL Google Spreadsheet yang valid.', 'error');
+      state.settings.spreadsheetUrl = url;
+      save();
+      toast('URL Google Spreadsheet diperbarui!');
+      syncAllFromSheets(false);
+    }
+
+    function resetDefaultSheetUrl() {
+      state.settings.spreadsheetUrl = DEFAULT_SHEET_URL;
+      save();
+      toast('URL dikembalikan ke Google Spreadsheet default.');
+      const inp = document.getElementById('cfgSheetUrl');
+      if (inp) inp.value = DEFAULT_SHEET_URL;
+      syncAllFromSheets(false);
     }
 
     function saveSettings(e) {
@@ -2141,6 +3979,13 @@
       renderNav();
       render();
       document.getElementById('modalWrap').addEventListener('click', e => { if (e.target.id === 'modalWrap') closeModal(); });
+      
+      // Auto-sinkronisasi dari Google Sheets secara otomatis pada saat web dibuka
+      if (state.settings.autoSyncOnOpen !== false) {
+        setTimeout(() => {
+          syncAllFromSheets(true);
+        }, 300);
+      }
     });
   </script>
 </body>
