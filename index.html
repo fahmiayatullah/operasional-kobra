@@ -43,6 +43,10 @@
     ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.35); border-radius: 999px; }
     ::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.6); }
 
+    /* Hilangkan scrollbar default tapi tetap bisa di-scroll secara mulus */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
     @keyframes modalPop {
       from { opacity: 0; transform: translateY(8px) scale(0.985); }
       to { opacity: 1; transform: translateY(0) scale(1); }
@@ -71,13 +75,13 @@
   <div id="toastBox" class="fixed bottom-4 right-4 z-[95] flex flex-col gap-2 max-w-sm w-[calc(100%-2rem)] pointer-events-none"></div>
 
   <!-- Backdrop Mobile -->
-  <div id="navBackdrop" onclick="toggleSidebar(false)" class="fixed inset-0 bg-slate-950/50 backdrop-blur-[2px] z-40 hidden lg:hidden"></div>
+  <div id="navBackdrop" onclick="toggleSidebar(false)" class="fixed inset-0 bg-slate-950/50 backdrop-blur-[2px] z-40 hidden"></div>
 
   <!-- =========================================================
-       SIDEBAR MINIMALIS (12 HALAMAN)
+       SIDEBAR NAVIGASI (12 HALAMAN) - BISA DIGULIR & DISEMBUNYIKAN
   ========================================================== -->
-  <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-60 bg-white dark:bg-[#111623] border-r border-slate-200/80 dark:border-slate-800/80 flex flex-col transform -translate-x-full lg:translate-x-0 transition-transform duration-200">
-    <!-- Brand -->
+  <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-[#111623] border-r border-slate-200/80 dark:border-slate-800/80 flex flex-col transform -translate-x-full transition-transform duration-300 ease-in-out shadow-2xl lg:shadow-none">
+    <!-- Brand & Tombol Sembunyikan Menu -->
     <div class="h-16 px-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 shrink-0">
       <div class="flex items-center gap-2.5 min-w-0">
         <div class="w-9 h-9 rounded-xl bg-slate-900 dark:bg-amber-500 text-amber-400 dark:text-slate-950 flex items-center justify-center shrink-0 shadow-xs">
@@ -91,69 +95,92 @@
           <div class="text-[11px] text-slate-400 truncate">Operasional Percetakan</div>
         </div>
       </div>
-      <button onclick="toggleSidebar(false)" class="lg:hidden p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Tutup menu">
-        <i data-lucide="x" class="w-4 h-4"></i>
+      <!-- Tombol Sembunyikan Menu (Bisa di-klik di Desktop & Mobile) -->
+      <button onclick="toggleSidebar(false)" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Sembunyikan menu navigasi" aria-label="Sembunyikan menu">
+        <i data-lucide="panel-left-close" class="w-4 h-4"></i>
       </button>
     </div>
 
-    <!-- Menu 12 Halaman -->
-    <nav id="sidebarNav" class="flex-1 overflow-y-auto px-3 py-3 space-y-0.5 text-[13px]"></nav>
+    <!-- Menu 12 Halaman (Bisa Digulir Mulus) -->
+    <nav id="sidebarNav" class="flex-1 overflow-y-auto px-3 py-3 space-y-0.5 text-[13px] overscroll-contain"></nav>
 
-    <!-- Tombol Sinkronisasi Spreadsheet -->
-    <div class="p-3 border-t border-slate-100 dark:border-slate-800/80 shrink-0 space-y-1.5">
+    <!-- Tombol Bawah: Sinkronisasi & Sembunyikan -->
+    <div class="p-3 border-t border-slate-100 dark:border-slate-800/80 shrink-0 space-y-2">
       <button onclick="syncAllData(false)" class="w-full py-2 px-3 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-500/25 text-xs font-semibold flex items-center justify-center gap-2 transition shadow-xs">
         <i data-lucide="refresh-cw" class="w-3.5 h-3.5 shrink-0"></i>
         <span id="sidebarSyncText">Sinkronkan Database</span>
       </button>
-      <button onclick="openExcelModal()" class="w-full py-1 text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center justify-center gap-1.5">
-        <i data-lucide="file-spreadsheet" class="w-3 h-3"></i>
-        <span>Cadangan File Lokal</span>
-      </button>
+      
+      <div class="flex items-center gap-1.5">
+        <button onclick="openExcelModal()" class="flex-1 py-1.5 text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center justify-center gap-1 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/60 transition" title="Cadangan File Excel">
+          <i data-lucide="file-spreadsheet" class="w-3 h-3"></i>
+          <span>Excel</span>
+        </button>
+        <button onclick="toggleSidebar(false)" class="flex-1 py-1.5 text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center justify-center gap-1 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/60 transition" title="Sembunyikan Menu">
+          <i data-lucide="chevrons-left" class="w-3 h-3"></i>
+          <span>Sembunyikan</span>
+        </button>
+      </div>
     </div>
   </aside>
 
   <!-- =========================================================
        AREA KONTEN UTAMA
   ========================================================== -->
-  <div class="lg:pl-60 min-h-full flex flex-col">
-    <!-- Topbar Bersih -->
-    <header class="sticky top-0 z-30 h-16 bg-white/85 dark:bg-[#111623]/85 backdrop-blur-md border-b border-slate-200/70 dark:border-slate-800/80 px-4 sm:px-6 flex items-center justify-between gap-3">
-      <div class="flex items-center gap-3 min-w-0">
-        <button onclick="toggleSidebar(true)" class="lg:hidden p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300" aria-label="Menu">
-          <i data-lucide="menu" class="w-4 h-4"></i>
-        </button>
-        <div class="min-w-0">
-          <h1 id="pageTitle" class="text-base font-bold tracking-tight text-slate-900 dark:text-white truncate">Dashboard</h1>
-          <p id="pageDesc" class="text-xs text-slate-400 truncate hidden sm:block">Ringkasan usaha Percetakan Kobra Hitam</p>
+  <div id="mainContent" class="min-h-full flex flex-col transition-all duration-300 ease-in-out">
+    
+    <!-- Wrapper Header Sticky & Auto-Hide saat Digulir -->
+    <div id="headerWrapper" class="sticky top-0 z-30 transition-transform duration-300 ease-in-out">
+      <!-- Topbar Bersih -->
+      <header id="mainHeader" class="h-16 bg-white/90 dark:bg-[#111623]/90 backdrop-blur-md border-b border-slate-200/70 dark:border-slate-800/80 px-4 sm:px-6 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <button onclick="toggleSidebar()" id="sidebarToggleBtn" class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Buka / Sembunyikan Menu Navigasi" aria-label="Toggle Menu">
+            <i id="sidebarToggleIcon" data-lucide="menu" class="w-4 h-4"></i>
+          </button>
+          <div class="min-w-0">
+            <h1 id="pageTitle" class="text-base font-bold tracking-tight text-slate-900 dark:text-white truncate">Dashboard</h1>
+            <p id="pageDesc" class="text-xs text-slate-400 truncate hidden sm:block">Ringkasan usaha Percetakan Kobra Hitam</p>
+          </div>
         </div>
-      </div>
 
-      <div class="flex items-center gap-2 shrink-0">
-        <!-- Live Sync Status Button -->
-        <button onclick="syncAllData(false)" id="sheetsSyncBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 transition shadow-xs" title="Klik untuk sinkronkan data (Supabase / Sheets)">
-          <span id="syncDot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span id="sheetsSyncLabel">Supabase Realtime</span>
-        </button>
-        <a href="https://docs.google.com/spreadsheets/d/17fNVMEWJxoCLs941Z1sLtlclAq8dlGCov_-TxW26ZXQ/edit?usp=sharing" target="_blank" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Buka Spreadsheet di Tab Baru">
-          <i data-lucide="external-link" class="w-3.5 h-3.5 text-amber-500"></i>
-          <span>Spreadsheet</span>
-        </a>
-        <span id="stockBadge" class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-          83 Barang
-        </span>
-        <button onclick="go('kasir')" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 text-xs font-semibold hover:opacity-90 transition">
-          <i data-lucide="shopping-cart" class="w-3.5 h-3.5"></i>
-          <span class="hidden sm:inline">Kasir</span>
-        </button>
-        <button onclick="toggleTheme()" class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Mode Gelap / Terang">
-          <i id="themeIcon" data-lucide="moon" class="w-4 h-4"></i>
-        </button>
-      </div>
-    </header>
+        <div class="flex items-center gap-2 shrink-0">
+          <!-- Live Sync Status Button -->
+          <button onclick="syncAllData(false)" id="sheetsSyncBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 transition shadow-xs" title="Klik untuk sinkronkan data (Supabase / Sheets)">
+            <span id="syncDot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span id="sheetsSyncLabel">Supabase Realtime</span>
+          </button>
+          <a href="https://docs.google.com/spreadsheets/d/17fNVMEWJxoCLs941Z1sLtlclAq8dlGCov_-TxW26ZXQ/edit?usp=sharing" target="_blank" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Buka Spreadsheet di Tab Baru">
+            <i data-lucide="external-link" class="w-3.5 h-3.5 text-amber-500"></i>
+            <span>Spreadsheet</span>
+          </a>
+          <span id="stockBadge" class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            83 Barang
+          </span>
+          <button onclick="go('kasir')" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 text-xs font-semibold hover:opacity-90 transition">
+            <i data-lucide="shopping-cart" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Kasir</span>
+          </button>
+          <button onclick="toggleTheme()" class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Mode Gelap / Terang">
+            <i id="themeIcon" data-lucide="moon" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- Pita Menu Cepat Navigasi (Bisa Digulir Horizontal & Disembunyikan) -->
+      <nav id="quickNavPills" class="bg-white/95 dark:bg-[#111623]/95 backdrop-blur-md border-b border-slate-200/70 dark:border-slate-800/80 px-4 sm:px-6 py-2 overflow-x-auto no-scrollbar flex items-center gap-1.5 scroll-smooth transition-all duration-300"></nav>
+    </div>
 
     <!-- Konten Halaman -->
     <main id="app" class="flex-1 p-4 sm:p-6 max-w-[1440px] w-full mx-auto"></main>
+  </div>
+
+  <!-- Tombol Melayang Menu (Muncul Otomatis saat Header Tersembunyi karena Gulir Halaman) -->
+  <div id="floatingMenuBtn" class="fixed bottom-5 left-5 z-40 transition-all duration-300 opacity-0 pointer-events-none transform translate-y-3">
+    <button onclick="toggleSidebar(); scrollToTopIfHidden();" class="px-4 py-2.5 rounded-full bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 font-bold text-xs shadow-2xl border border-slate-700/40 flex items-center gap-2 hover:scale-105 active:scale-95 transition">
+      <i data-lucide="menu" class="w-4 h-4"></i>
+      <span>Menu Navigasi</span>
+    </button>
   </div>
 
   <!-- =========================================================
@@ -2307,9 +2334,78 @@
       if (ic) { ic.setAttribute('data-lucide', dark ? 'sun' : 'moon'); lucide.createIcons(); }
     }
     function toggleTheme() { state.settings.darkMode = !state.settings.darkMode; save(); applyTheme(); }
-    function toggleSidebar(open) {
-      document.getElementById('sidebar').classList.toggle('-translate-x-full', !open);
-      document.getElementById('navBackdrop').classList.toggle('hidden', !open);
+    // -------------------------------------------------------------------------
+    // 3. NAVIGASI, SIDEBAR & AUTO-HIDE PADA GULIR (SCROLL)
+    // -------------------------------------------------------------------------
+    let sidebarOpen = window.innerWidth >= 1024 
+      ? (localStorage.getItem('kobra_sidebar_open') !== 'false') 
+      : false;
+
+    function applySidebarState() {
+      const sb = document.getElementById('sidebar');
+      const main = document.getElementById('mainContent');
+      const backdrop = document.getElementById('navBackdrop');
+      const toggleIcon = document.getElementById('sidebarToggleIcon');
+      const isDesktop = window.innerWidth >= 1024;
+
+      if (isDesktop) {
+        if (backdrop) backdrop.classList.add('hidden');
+        if (sidebarOpen) {
+          if (sb) {
+            sb.classList.remove('-translate-x-full');
+            sb.classList.add('translate-x-0');
+          }
+          if (main) {
+            main.classList.remove('lg:pl-0');
+            main.classList.add('lg:pl-64');
+          }
+        } else {
+          if (sb) {
+            sb.classList.remove('translate-x-0');
+            sb.classList.add('-translate-x-full');
+          }
+          if (main) {
+            main.classList.remove('lg:pl-64');
+            main.classList.add('lg:pl-0');
+          }
+        }
+      } else {
+        // Mode Mobile / Layar Kecil
+        if (main) {
+          main.classList.remove('lg:pl-64');
+          main.classList.add('lg:pl-0');
+        }
+        if (sidebarOpen) {
+          if (sb) {
+            sb.classList.remove('-translate-x-full');
+            sb.classList.add('translate-x-0');
+          }
+          if (backdrop) backdrop.classList.remove('hidden');
+        } else {
+          if (sb) {
+            sb.classList.remove('translate-x-0');
+            sb.classList.add('-translate-x-full');
+          }
+          if (backdrop) backdrop.classList.add('hidden');
+        }
+      }
+
+      if (toggleIcon) {
+        toggleIcon.setAttribute('data-lucide', (isDesktop && sidebarOpen) ? 'panel-left-close' : 'menu');
+        lucide.createIcons({ nodes: [toggleIcon.parentElement] });
+      }
+    }
+
+    function toggleSidebar(force) {
+      if (typeof force === 'boolean') {
+        sidebarOpen = force;
+      } else {
+        sidebarOpen = !sidebarOpen;
+      }
+      if (window.innerWidth >= 1024) {
+        localStorage.setItem('kobra_sidebar_open', sidebarOpen ? 'true' : 'false');
+      }
+      applySidebarState();
     }
 
     function updateBadges() {
@@ -2323,7 +2419,7 @@
     }
 
     // -------------------------------------------------------------------------
-    // 3. NAVIGASI SIDEBAR & RENDER HALAMAN
+    // 4. NAVIGASI SIDEBAR, QUICK NAV PILLS & RENDER HALAMAN
     // -------------------------------------------------------------------------
     function renderNav() {
       const nav = document.getElementById('sidebarNav');
@@ -2348,15 +2444,96 @@
       lucide.createIcons({ nodes: [nav] });
     }
 
+    function renderQuickNavPills() {
+      const wrap = document.getElementById('quickNavPills');
+      if (!wrap) return;
+      wrap.innerHTML = PAGES.map(p => {
+        const active = p.id === page;
+        return `
+          <button onclick="go('${p.id}')" class="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 transition shrink-0 ${
+            active 
+              ? 'bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 shadow-xs' 
+              : 'bg-slate-100/90 dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+          }">
+            <i data-lucide="${p.icon}" class="w-3.5 h-3.5 ${active ? 'text-amber-400 dark:text-slate-950' : 'text-slate-400'}"></i>
+            <span>${p.label}</span>
+          </button>
+        `;
+      }).join('');
+      lucide.createIcons({ nodes: [wrap] });
+
+      // Pusatkan pill aktif secara otomatis saat digulir
+      try {
+        const activeBtn = wrap.querySelector('.bg-slate-900, .dark\\:bg-amber-500');
+        if (activeBtn) {
+          activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+      } catch (e) {}
+    }
+
+    let lastScrollY = 0;
+    let isHeaderHidden = false;
+
+    function initScrollAutoHide() {
+      window.addEventListener('scroll', () => {
+        const currentScrollY = window.scrollY;
+        const headerWrap = document.getElementById('headerWrapper');
+        const floatingBtn = document.getElementById('floatingMenuBtn');
+
+        const diff = currentScrollY - lastScrollY;
+
+        // Scroll KE BAWAH melebihi 70px -> Sembunyikan header/menu
+        if (currentScrollY > 70 && diff > 8 && !isHeaderHidden) {
+          isHeaderHidden = true;
+          if (headerWrap) headerWrap.style.transform = 'translateY(-100%)';
+          if (floatingBtn) {
+            floatingBtn.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-3');
+            floatingBtn.classList.add('opacity-100', 'pointer-events-auto', 'translate-y-0');
+          }
+        } else if (diff < -6 && isHeaderHidden) {
+          // Scroll KE ATAS -> Tampilkan kembali header/menu
+          isHeaderHidden = false;
+          if (headerWrap) headerWrap.style.transform = 'translateY(0)';
+          if (floatingBtn) {
+            floatingBtn.classList.remove('opacity-100', 'pointer-events-auto', 'translate-y-0');
+            floatingBtn.classList.add('opacity-0', 'pointer-events-none', 'translate-y-3');
+          }
+        }
+
+        // Posisi paling atas
+        if (currentScrollY <= 20 && isHeaderHidden) {
+          isHeaderHidden = false;
+          if (headerWrap) headerWrap.style.transform = 'translateY(0)';
+          if (floatingBtn) {
+            floatingBtn.classList.remove('opacity-100', 'pointer-events-auto', 'translate-y-0');
+            floatingBtn.classList.add('opacity-0', 'pointer-events-none', 'translate-y-3');
+          }
+        }
+
+        lastScrollY = currentScrollY;
+      }, { passive: true });
+    }
+
+    function scrollToTopIfHidden() {
+      if (isHeaderHidden) {
+        const headerWrap = document.getElementById('headerWrapper');
+        if (headerWrap) headerWrap.style.transform = 'translateY(0)';
+        isHeaderHidden = false;
+      }
+    }
+
     function go(id) {
       page = id;
-      toggleSidebar(false);
+      if (window.innerWidth < 1024) {
+        toggleSidebar(false);
+      }
       const p = PAGES.find(x => x.id === id) || PAGES[0];
       const pTitle = document.getElementById('pageTitle');
       const pDesc = document.getElementById('pageDesc');
       if (pTitle) pTitle.textContent = p.label;
       if (pDesc) pDesc.textContent = p.desc;
       renderNav();
+      renderQuickNavPills();
       render();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -5044,10 +5221,23 @@
     // -------------------------------------------------------------------------
     window.addEventListener('DOMContentLoaded', () => {
       applyTheme();
+      applySidebarState();
       updateBadges();
       renderNav();
+      renderQuickNavPills();
       render();
+      initScrollAutoHide();
       document.getElementById('modalWrap').addEventListener('click', e => { if (e.target.id === 'modalWrap') closeModal(); });
+
+      // Resize window handler untuk responsif sidebar
+      window.addEventListener('resize', () => {
+        if (window.innerWidth >= 1024) {
+          sidebarOpen = localStorage.getItem('kobra_sidebar_open') !== 'false';
+        } else {
+          sidebarOpen = false;
+        }
+        applySidebarState();
+      });
       
       // Inisialisasi Supabase Client jika kredensial sudah ada
       getSupabase();
