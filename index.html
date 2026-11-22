@@ -1742,6 +1742,9 @@
           if (nama && no && !isNaN(parseInt(no, 10))) {
             const noInt = parseInt(no, 10);
             const exist = state.products.find(p => p.nama.toLowerCase() === nama.toLowerCase() || p.no === noInt);
+            // Jika harga diubah secara manual oleh pengguna di web, pertahankan harga manual tersebut!
+            const finalHargaJual = (exist && exist.customPrice && exist.hargaJual > 0) ? exist.hargaJual : (hargaJual || exist?.hargaJual || 0);
+
             newProducts.push({
               id: exist?.id || `prd_${String(noInt).padStart(3, '0')}`,
               no: noInt,
@@ -1752,7 +1755,8 @@
               isiKemasan,
               hargaBeli,
               hargaBeliSatuan,
-              hargaJual,
+              hargaJual: finalHargaJual,
+              customPrice: !!(exist && exist.customPrice),
               kategoriId: guessCat(nama, deskripsi),
               supplier,
               aktif: true
@@ -1764,7 +1768,15 @@
           state.products = newProducts;
         }
 
-        // 2. Ambil Belanja (Pengadaan Bahan)
+        // 2. Ambil Harga Jasa & HPP dari Spreadsheet
+        try {
+          const tableJasa = await fetchGvizJsonp(sheetId, 'Harga Jasa');
+          syncJasaFromSheet(tableJasa);
+        } catch (eJasa) {
+          console.warn('Gagal memuat tab Harga Jasa:', eJasa);
+        }
+
+        // 3. Ambil Belanja (Pengadaan Bahan)
         try {
           const tableBelanja = await fetchGvizJsonp(sheetId, 'Belanja');
           const newBelanja = [];
@@ -1789,7 +1801,7 @@
           console.warn('Gagal memuat tab Belanja:', eBelanja);
         }
 
-        // 3. Kalibrasi Resep Jasa
+        // 4. Kalibrasi Resep Jasa
         autoLinkRecipes();
 
         state.settings.lastSync = new Date().toISOString();
@@ -1803,7 +1815,7 @@
         if (sideText) sideText.textContent = `Sinkronkan Sheets (${state.products.length})`;
 
         if (!silent) {
-          toast(`Berhasil sinkronkan ${state.products.length} Barang & ${state.belanja?.length || 0} Belanja dari Google Sheets!`);
+          toast(`Berhasil sinkronkan ${state.products.length} Barang & ${state.services.length} Jasa dari Google Sheets!`);
         }
       } catch (err) {
         console.error('Sync error:', err);
@@ -1816,6 +1828,54 @@
       } finally {
         isSyncingSheets = false;
       }
+    }
+
+    function syncJasaFromSheet(tableJasa) {
+      if (!tableJasa || !tableJasa.rows) return;
+      const servicesMap = {
+        svc_fotokopi: { items: [], listrik: 2, jasa: 163 },
+        svc_print_bw: { items: [], listrik: 21, jasa: 189 },
+        svc_print_warna: { items: [], listrik: 42, jasa: 228 },
+        svc_jilid: { items: [], listrik: 0, jasa: 0 },
+        svc_lam_f4: { items: [], listrik: 320, jasa: 1000 },
+        svc_lam_a4: { items: [], listrik: 320, jasa: 1000 }
+      };
+
+      let currentSvc = 'svc_fotokopi';
+      tableJasa.rows.forEach((r, idx) => {
+        const c = r.c || [];
+        const cell = i => (c[i] ? (c[i].f !== undefined && c[i].f !== null ? c[i].f : c[i].v) : '') || '';
+        const col0 = String(cell(0)).trim().toLowerCase();
+        const col1 = String(cell(1)).trim();
+        const col6 = parseIndoNum(cell(6));
+
+        if (col0.includes('print warna')) currentSvc = 'svc_print_warna';
+        else if (col0.includes('print')) currentSvc = 'svc_print_bw';
+        else if (col0.includes('jilid')) currentSvc = 'svc_jilid';
+        else if (col0.includes('laminating')) currentSvc = idx < 28 ? 'svc_lam_f4' : 'svc_lam_a4';
+        else if (col0.includes('foto copy') || col0.includes('fotokopi')) currentSvc = 'svc_fotokopi';
+
+        if (col1 && !col1.toLowerCase().includes('total')) {
+          const lCol1 = col1.toLowerCase();
+          if (lCol1.includes('listrik')) {
+            servicesMap[currentSvc].listrik = col6 || servicesMap[currentSvc].listrik;
+          } else if (lCol1.includes('jasa')) {
+            servicesMap[currentSvc].jasa = col6 || servicesMap[currentSvc].jasa;
+          } else {
+            servicesMap[currentSvc].items.push({ id: uid('b'), nama: col1, biaya: col6 });
+          }
+        }
+      });
+
+      // Update state.services without overriding custom user selling price
+      state.services.forEach(s => {
+        const parsed = servicesMap[s.id];
+        if (parsed && parsed.items.length) {
+          s.bahanItems = parsed.items;
+          s.listrik = parsed.listrik;
+          s.jasa = parsed.jasa;
+        }
+      });
     }
 
     // -------------------------------------------------------------------------
@@ -3570,7 +3630,7 @@
     function addBahan(id) { const s = state.services.find(x => x.id === id); if (s) { s.bahanItems.push({ id: uid('b'), nama: 'Bahan baru', biaya: 0 }); save(); render(); } }
     function delBahan(id, i) { const s = state.services.find(x => x.id === id); if (s) { s.bahanItems.splice(i, 1); save(); render(); } }
     function setSvc(id, k, v) { const s = state.services.find(x => x.id === id); if (s) { s[k] = parseFloat(v) || 0; save(); render(); } }
-    function applySvcPrice(id, p) { const s = state.services.find(x => x.id === id); if (s) { s.hargaJual = p; save(); toast(`Harga ${s.nama} diperbarui menjadi ${rp(p)}.`); render(); } }
+    function applySvcPrice(id, p) { const s = state.services.find(x => x.id === id); if (s) { s.hargaJual = p; s.customPrice = true; save(); toast(`Harga ${s.nama} diperbarui menjadi ${rp(p)}.`); render(); } }
     function resetSvcHpp(id) {
       const def = defaultServices().find(x => x.id === id), i = state.services.findIndex(x => x.id === id);
       if (def && i >= 0) { state.services[i] = { ...state.services[i], bahanItems: def.bahanItems, listrik: def.listrik, jasa: def.jasa }; save(); toast('HPP dikembalikan ke standar.'); render(); }
@@ -3638,33 +3698,172 @@
     function viewDaftarHarga(el) {
       el.innerHTML = `
         <div class="space-y-4">
-          <div class="flex flex-wrap items-center justify-between gap-2">
+          <!-- Toolbar Atas -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div class="flex gap-1.5">
-              <button onclick="ui.priceTab='jasa'; render()" class="px-3.5 py-2 rounded-xl text-xs font-semibold ${ui.priceTab === 'jasa' ? 'bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950' : 'bg-white dark:bg-[#111623] border border-slate-200 dark:border-slate-800'}">Jasa (${state.services.length})</button>
-              <button onclick="ui.priceTab='barang'; render()" class="px-3.5 py-2 rounded-xl text-xs font-semibold ${ui.priceTab === 'barang' ? 'bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950' : 'bg-white dark:bg-[#111623] border border-slate-200 dark:border-slate-800'}">Barang (${state.products.length})</button>
+              <button onclick="ui.priceTab='jasa'; render()" class="px-3.5 py-2 rounded-xl text-xs font-semibold ${ui.priceTab === 'jasa' ? 'bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 shadow-xs' : 'bg-white dark:bg-[#111623] border border-slate-200 dark:border-slate-800'}">
+                Harga Jasa (${state.services.length})
+              </button>
+              <button onclick="ui.priceTab='barang'; render()" class="px-3.5 py-2 rounded-xl text-xs font-semibold ${ui.priceTab === 'barang' ? 'bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 shadow-xs' : 'bg-white dark:bg-[#111623] border border-slate-200 dark:border-slate-800'}">
+                Harga Barang (${state.products.length})
+              </button>
             </div>
-            <button onclick="printPrices()" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#111623] text-xs font-semibold flex items-center gap-1.5"><i data-lucide="printer" class="w-3.5 h-3.5"></i> Cetak Daftar Harga</button>
+            <div class="flex items-center gap-2">
+              <button onclick="saveAllPricesManual()" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition" title="Simpan permanen ke penyimpanan browser">
+                <i data-lucide="check" class="w-3.5 h-3.5"></i> Simpan Perubahan Harga
+              </button>
+              <button onclick="resetPricesToSpreadsheet()" class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#111623] text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-white transition" title="Kembalikan seluruh harga ke nilai asli dari Google Spreadsheet">
+                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+              </button>
+              <button onclick="printPrices()" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#111623] text-xs font-semibold flex items-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                <i data-lucide="printer" class="w-3.5 h-3.5"></i> Cetak Daftar Harga
+              </button>
+            </div>
           </div>
 
-          <div class="bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden">
+          <div class="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 text-[11px] text-amber-800 dark:text-amber-300 flex items-center justify-between">
+            <span>💡 <b>Tips:</b> Anda bisa langsung mengetik angka harga jual baru di kolom input bawah. Angka otomatis tersimpan secara instan di browser dan tidak akan hilang saat di-refresh.</span>
+          </div>
+
+          <!-- Tabel Harga -->
+          <div class="bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden shadow-xs">
             ${ui.priceTab === 'jasa' ? `
               <table class="w-full text-xs text-left">
-                <thead class="bg-slate-50 dark:bg-slate-900/60 text-slate-500"><tr><th class="p-3">Layanan Jasa</th><th class="p-3">Satuan</th><th class="p-3 text-right">HPP</th><th class="p-3 text-right">Harga Jual (Edit)</th><th class="p-3 text-right">Laba/Unit</th></tr></thead>
+                <thead class="bg-slate-50 dark:bg-slate-900/60 text-slate-500 border-b border-slate-100 dark:border-slate-800">
+                  <tr>
+                    <th class="p-3 font-semibold">Layanan Jasa Percetakan</th>
+                    <th class="p-3 font-semibold">Satuan</th>
+                    <th class="p-3 font-semibold text-right">Modal / HPP</th>
+                    <th class="p-3 font-semibold text-right">Harga Jual Aktif (Edit Langsung)</th>
+                    <th class="p-3 font-semibold text-right">Estimasi Laba / Unit</th>
+                  </tr>
+                </thead>
                 <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-                  ${state.services.map(s => { const h = svcHpp(s).hpp; return `<tr><td class="p-3 font-semibold">${esc(s.nama)}</td><td class="p-3 text-slate-400">${esc(s.satuan)}</td><td class="p-3 text-right font-mono text-slate-400">${rp(h)}</td><td class="p-3 text-right"><input type="number" value="${s.hargaJual}" onchange="applySvcPrice('${s.id}',parseFloat(this.value)||0)" class="w-28 text-right px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold" /></td><td class="p-3 text-right font-mono font-semibold text-emerald-600">${rp(s.hargaJual - h)}</td></tr>`; }).join('')}
+                  ${state.services.map(s => {
+                    const h = svcHpp(s).hpp;
+                    const laba = (Number(s.hargaJual) || 0) - h;
+                    return `
+                      <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition">
+                        <td class="p-3 font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                          <span>${esc(s.nama)}</span>
+                          ${s.customPrice ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400">Manual</span>' : ''}
+                        </td>
+                        <td class="p-3 text-slate-400">${esc(s.satuan)}</td>
+                        <td class="p-3 text-right font-mono text-slate-500">${rp(h)}</td>
+                        <td class="p-3 text-right">
+                          <div class="inline-flex items-center gap-1">
+                            <span class="text-slate-400 font-mono text-xs">Rp</span>
+                            <input
+                              type="number"
+                              step="any"
+                              value="${s.hargaJual}"
+                              oninput="updateSvcPriceLive('${s.id}', this.value)"
+                              class="w-32 text-right px-2.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                              placeholder="0"
+                            />
+                          </div>
+                        </td>
+                        <td class="p-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400" id="laba_${s.id}">
+                          ${rp(laba)}
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
                 </tbody>
               </table>
             ` : (!state.products.length ? `<p class="p-10 text-center text-xs text-slate-400">Belum ada data barang.</p>` : `
-              <div class="overflow-x-auto"><table class="w-full text-xs text-left">
-                <thead class="bg-slate-50 dark:bg-slate-900/60 text-slate-500"><tr><th class="p-3">Nama Barang</th><th class="p-3">Kemasan</th><th class="p-3 text-right">Beli Satuan</th><th class="p-3 text-right">Harga Jual (Edit)</th><th class="p-3 text-right">Margin</th></tr></thead>
-                <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-                  ${state.products.map(p => `<tr><td class="p-3 font-semibold">${esc(p.nama)}</td><td class="p-3 text-slate-400">${esc(p.isiKemasan || '-')}</td><td class="p-3 text-right font-mono text-slate-400">${rp(p.hargaBeliSatuan)}</td><td class="p-3 text-right"><input type="number" value="${p.hargaJual}" onchange="const x=state.products.find(z=>z.id==='${p.id}'); if(x){x.hargaJual=parseFloat(this.value)||0; save(); toast('Harga diperbarui.'); render();}" class="w-28 text-right px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold" /></td><td class="p-3 text-right font-mono font-semibold text-emerald-600">${rp((p.hargaJual || 0) - (p.hargaBeliSatuan || 0))}</td></tr>`).join('')}
-                </tbody>
-              </table></div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs text-left">
+                  <thead class="bg-slate-50 dark:bg-slate-900/60 text-slate-500 border-b border-slate-100 dark:border-slate-800">
+                    <tr>
+                      <th class="p-3 font-semibold">Nama Barang</th>
+                      <th class="p-3 font-semibold">Kemasan</th>
+                      <th class="p-3 font-semibold text-right">Modal / Beli Satuan</th>
+                      <th class="p-3 font-semibold text-right">Harga Jual Toko (Edit Langsung)</th>
+                      <th class="p-3 font-semibold text-right">Margin Keuntungan</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                    ${state.products.map(p => {
+                      const margin = (Number(p.hargaJual) || 0) - (Number(p.hargaBeliSatuan) || 0);
+                      return `
+                        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition">
+                          <td class="p-3 font-semibold text-slate-800 dark:text-slate-100">
+                            ${esc(p.nama)}
+                            ${p.customPrice ? '<span class="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400">Manual</span>' : ''}
+                          </td>
+                          <td class="p-3 text-slate-400">${esc(p.isiKemasan || '-')}</td>
+                          <td class="p-3 text-right font-mono text-slate-500">${rp(p.hargaBeliSatuan)}</td>
+                          <td class="p-3 text-right">
+                            <div class="inline-flex items-center gap-1">
+                              <span class="text-slate-400 font-mono text-xs">Rp</span>
+                              <input
+                                type="number"
+                                step="any"
+                                value="${p.hargaJual}"
+                                oninput="updateProdPriceLive('${p.id}', this.value)"
+                                class="w-32 text-right px-2.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                                placeholder="0"
+                              />
+                            </div>
+                          </td>
+                          <td class="p-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400" id="margin_${p.id}">
+                            ${rp(margin)}
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
             `)}
           </div>
         </div>
       `;
+    }
+
+    function updateSvcPriceLive(id, val) {
+      const p = parseFloat(val) || 0;
+      const s = state.services.find(x => x.id === id);
+      if (s) {
+        s.hargaJual = p;
+        s.customPrice = true;
+        save();
+        const labaEl = document.getElementById('laba_' + id);
+        if (labaEl) {
+          const h = svcHpp(s).hpp;
+          labaEl.textContent = rp(p - h);
+        }
+      }
+    }
+
+    function updateProdPriceLive(id, val) {
+      const p = parseFloat(val) || 0;
+      const prod = state.products.find(x => x.id === id);
+      if (prod) {
+        prod.hargaJual = p;
+        prod.customPrice = true;
+        save();
+        const marginEl = document.getElementById('margin_' + id);
+        if (marginEl) {
+          marginEl.textContent = rp(p - (Number(prod.hargaBeliSatuan) || 0));
+        }
+      }
+    }
+
+    function saveAllPricesManual() {
+      save();
+      toast('Seluruh perubahan harga berhasil disimpan secara permanen!');
+      render();
+    }
+
+    function resetPricesToSpreadsheet() {
+      confirmDialog('Reset Harga ke Spreadsheet?', 'Harga jual akan dikembalikan sesuai data di Google Spreadsheet.', () => {
+        state.services.forEach(s => delete s.customPrice);
+        state.products.forEach(p => delete p.customPrice);
+        save();
+        syncAllFromSheets(false);
+      }, 'Ya, Reset Harga');
     }
 
     function printPrices() {
