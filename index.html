@@ -221,14 +221,12 @@
       { id: 'barang', label: 'Harga Dasar (Barang)', icon: 'package', group: 'Inventaris', desc: 'Master 83 barang & 8 kolom dari Google Sheets' },
       { id: 'belanja', label: 'Belanja & Pengeluaran', icon: 'shopping-bag', group: 'Inventaris', desc: 'Catatan belanja bahan & modal dari tab Belanja' },
       { id: 'stok-masuk', label: 'Stok Masuk', icon: 'package-plus', group: 'Inventaris', desc: 'Catat barang masuk & pembelian ke jurnal' },
-      { id: 'stok-keluar', label: 'Stok Keluar', icon: 'package-minus', group: 'Inventaris', desc: 'Mutasi keluar manual, penyesuaian & resep otomatis' },
+      { id: 'stok-keluar', label: 'Stok Keluar', icon: 'package-minus', group: 'Inventaris', desc: 'Mutasi keluar manual & penyesuaian stok' },
       { id: 'kategori', label: 'Kategori Barang', icon: 'tags', group: 'Inventaris', desc: 'Kelompok jenis barang percetakan' },
-      { id: 'daftar-harga', label: 'Harga Jasa & Katalog', icon: 'tag', group: 'Produksi', desc: 'Katalog harga jual & breakdown HPP jasa percetakan' },
-      { id: 'kalkulator-hpp', label: 'Kalkulator HPP', icon: 'calculator', group: 'Produksi', desc: 'Hitung HPP, Markup, Margin & profit pesanan' },
-      { id: 'resep', label: 'Resep Bahan Baku', icon: 'flask-conical', group: 'Produksi', desc: 'Konsumsi bahan baku per unit jasa percetakan' },
+      { id: 'daftar-harga', label: 'Harga Jasa & Katalog', icon: 'tag', group: 'Inventaris', desc: 'Katalog harga jual & biaya jasa percetakan' },
       { id: 'jurnal', label: 'Jurnal Harian', icon: 'book-open', group: 'Keuangan', desc: 'Catatan otomatis seluruh transaksi & pengeluaran' },
       { id: 'laporan', label: 'Laporan Bulanan', icon: 'bar-chart-3', group: 'Keuangan', desc: 'Laporan harian, mingguan & bulanan terpisah' },
-      { id: 'pengaturan', label: 'Pengaturan & Sheets', icon: 'settings', group: 'Sistem', desc: 'Identitas usaha, link Google Sheets & backup data' },
+      { id: 'pengaturan', label: 'Pengaturan & Database', icon: 'settings', group: 'Sistem', desc: 'Identitas usaha, Supabase Cloud & backup data' },
     ];
 
     // Master 83 Barang Asli dari Google Sheets (Tab Harga Dasar)
@@ -1565,46 +1563,37 @@
           id: 'svc_fotokopi', nama: 'Fotokopi', satuan: 'lembar', aktif: true,
           bahanItems: [{ id: 'b1', nama: 'kertas a4 80g', biaya: 110 }, { id: 'b2', nama: 'TOONER/halaman', biaya: 25 }],
           listrik: 2, jasa: 163, // HPP = Rp300
-          markupPct: 66.67, marginPct: 40, hargaJual: 500,
-          resep: [{ id: 'r1', label: 'Kertas HVS', keyword: 'hvs', productId: '', qtyPerUnit: 1 }]
+          markupPct: 66.67, marginPct: 40, hargaJual: 500
         },
         {
           id: 'svc_print_bw', nama: 'Print Hitam Putih', satuan: 'lembar', aktif: true,
           bahanItems: [{ id: 'b1', nama: 'kertas a4 80g', biaya: 110 }, { id: 'b2', nama: 'tinta/halaman', biaya: 80 }],
           listrik: 21, jasa: 189, // HPP = Rp400
-          markupPct: 150, marginPct: 60, hargaJual: 1000,
-          resep: [{ id: 'r1', label: 'Kertas HVS', keyword: 'hvs', productId: '', qtyPerUnit: 1 }]
+          markupPct: 150, marginPct: 60, hargaJual: 1000
         },
         {
           id: 'svc_print_warna', nama: 'Print Warna', satuan: 'lembar', aktif: true,
           bahanItems: [{ id: 'b1', nama: 'kertas a4 80g', biaya: 110 }, { id: 'b2', nama: 'tinta/halaman', biaya: 320 }],
           listrik: 42, jasa: 228, // HPP = Rp700
-          markupPct: 185.71, marginPct: 65, hargaJual: 2000,
-          resep: [{ id: 'r1', label: 'Kertas HVS', keyword: 'hvs', productId: '', qtyPerUnit: 1 }]
+          markupPct: 185.71, marginPct: 65, hargaJual: 2000
         },
         {
           id: 'svc_jilid', nama: 'Jilid', satuan: 'buku', aktif: true,
           bahanItems: [{ id: 'b1', nama: 'Kertas bufalo', biaya: 2000 }, { id: 'b2', nama: 'tinta', biaya: 320 }, { id: 'b3', nama: 'steples', biaya: 68 }, { id: 'b4', nama: 'Lagband', biaya: 375 }],
           listrik: 0, jasa: 0, // HPP = Rp2.320
-          markupPct: 115.52, marginPct: 53.6, hargaJual: 5000,
-          resep: [
-            { id: 'r1', label: 'Cover Buffalo', keyword: 'bufalo', productId: '', qtyPerUnit: 1 },
-            { id: 'r2', label: 'Plastik Mika', keyword: 'mika', productId: '', qtyPerUnit: 1 }
-          ]
+          markupPct: 115.52, marginPct: 53.6, hargaJual: 5000
         },
         {
           id: 'svc_lam_f4', nama: 'Laminating F4', satuan: 'lembar', aktif: true,
           bahanItems: [{ id: 'b1', nama: 'mika f4', biaya: 7000 }],
           listrik: 320, jasa: 1000, // HPP = Rp8.320
-          markupPct: 44.23, marginPct: 30.67, hargaJual: 12000,
-          resep: [{ id: 'r1', label: 'mika f4', keyword: 'f4', productId: '', qtyPerUnit: 1 }]
+          markupPct: 44.23, marginPct: 30.67, hargaJual: 12000
         },
         {
           id: 'svc_lam_a4', nama: 'Laminating A4', satuan: 'lembar', aktif: true,
           bahanItems: [{ id: 'b1', nama: 'mika A4', biaya: 4000 }],
           listrik: 320, jasa: 1000, // HPP = Rp5.320
-          markupPct: 50.38, marginPct: 33.5, hargaJual: 8000,
-          resep: [{ id: 'r1', label: 'mika A4', keyword: 'a4', productId: '', qtyPerUnit: 1 }]
+          markupPct: 50.38, marginPct: 33.5, hargaJual: 8000
         }
       ];
     }
@@ -1657,7 +1646,6 @@
     const ui = {
       pos: { tab: 'semua', q: '', cat: 'all', cart: [], customer: '', note: '', discType: 'rp', discVal: 0, method: 'Tunai', paid: 0 },
       prod: { q: '', cat: 'all', stock: 'all' },
-      hpp: { svcId: 'svc_fotokopi', qty: 100 },
       priceTab: 'jasa',
       jrn: { type: 'all', q: '' },
       rep: { period: 'bulanan', date: todayISO(), month: todayISO().slice(0, 7) },
@@ -1802,13 +1790,15 @@
           } else if (payload.eventType === 'DELETE') {
             const delId = payload.old?.id;
             if (delId) {
-              const idx = state.sales.findIndex(s => s.id === delId);
-              if (idx !== -1) {
-                state.sales.splice(idx, 1);
-                save();
-                updateBadges();
-                render();
+              const sale = state.sales.find(s => s.id === delId);
+              const inv = sale?.invoiceNo;
+              state.sales = state.sales.filter(s => s.id !== delId);
+              if (inv) {
+                state.journal = state.journal.filter(j => j.refNo !== inv && j.meta?.saleId !== delId);
               }
+              save();
+              updateBadges();
+              render();
             }
           }
         })
@@ -1835,12 +1825,15 @@
           } else if (payload.eventType === 'DELETE') {
             const delId = payload.old?.id;
             if (delId) {
-              const idx = state.journal.findIndex(x => x.id === delId);
-              if (idx !== -1) {
-                state.journal.splice(idx, 1);
-                save();
-                render();
+              const j = state.journal.find(x => x.id === delId);
+              const saleId = j?.meta?.saleId;
+              const refNo = j?.ref_no;
+              state.journal = state.journal.filter(x => x.id !== delId);
+              if (saleId || (refNo && refNo.startsWith('KH-'))) {
+                state.sales = state.sales.filter(s => s.id !== saleId && s.invoiceNo !== refNo);
               }
+              save();
+              render();
             }
           }
         })
@@ -1935,7 +1928,6 @@
               hargaJual: Number(s.harga_jual) || 0,
               customPrice: !!s.custom_price,
               aktif: s.aktif !== false,
-              resep: s.resep || [],
               bahanItems: s.bahan_items || []
             }));
           }
@@ -1989,7 +1981,43 @@
             }));
           }
 
-          autoLinkRecipes();
+          // F. Rekonsiliasi: Pastikan setiap Penjualan memiliki catatan di Jurnal
+          if (state.sales.length > 0) {
+            const missingJournals = [];
+            for (const s of state.sales) {
+              const hasJrn = state.journal.some(j => j.refNo === s.invoiceNo || j.meta?.saleId === s.id);
+              if (!hasJrn) {
+                const jNew = {
+                  id: uid('jrn'),
+                  date: s.date,
+                  type: 'Penjualan',
+                  refNo: s.invoiceNo,
+                  description: `Penjualan ${s.customerName} (${s.items?.length || 1} item)`,
+                  direction: 'in',
+                  amount: s.total,
+                  hpp: s.totalHpp || 0,
+                  paymentMethod: s.paymentMethod || 'Tunai',
+                  meta: { saleId: s.id }
+                };
+                state.journal.unshift(jNew);
+                missingJournals.push(jNew);
+              }
+            }
+            if (missingJournals.length > 0) {
+              client.from('journal').insert(missingJournals.map(j => ({
+                id: j.id,
+                date: j.date,
+                type: j.type,
+                ref_no: j.refNo,
+                description: j.description,
+                direction: 'in',
+                amount: j.amount,
+                hpp: j.hpp,
+                payment_method: j.paymentMethod,
+                meta: j.meta
+              }))).catch(e => console.error('Reconciliation journal insert error:', e));
+            }
+          }
           state.settings.lastSync = new Date().toISOString();
           save();
           updateBadges();
@@ -2550,8 +2578,6 @@
           'stok-masuk': viewStokMasuk,
           'stok-keluar': viewStokKeluar,
           'kategori': viewKategori,
-          'kalkulator-hpp': viewHpp,
-          'resep': viewResep,
           'daftar-harga': viewDaftarHarga,
           'jurnal': viewJurnal,
           'laporan': viewLaporan,
@@ -2793,22 +2819,10 @@
       const items = extractExcelItems();
       if (!items.length) return toast('Tidak ada barang untuk diimpor.', 'warning');
       state.products = ui.excelPending.mode === 'replace' ? items : [...state.products, ...items];
-      autoLinkRecipes();
       save();
       closeModal();
       toast(`Berhasil memuat ${items.length} barang asli dari Excel!`);
       render();
-    }
-
-    function autoLinkRecipes() {
-      if (!state.products.length) return;
-      state.services.forEach(s => (s.resep || []).forEach(r => {
-        if (r.productId && state.products.some(p => p.id === r.productId)) return;
-        const kws = (r.keyword || r.label || '').toLowerCase().split(/\s+/).filter(Boolean);
-        const m = state.products.find(p => kws.every(k => `${p.nama} ${p.deskripsi}`.toLowerCase().includes(k)))
-          || state.products.find(p => kws.some(k => k.length > 2 && `${p.nama} ${p.deskripsi}`.toLowerCase().includes(k)));
-        if (m) r.productId = m.id;
-      }));
     }
 
     // -------------------------------------------------------------------------
@@ -2930,8 +2944,8 @@
                   <button onclick="go('stok-masuk')" class="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-left space-y-1.5 transition">
                     <i data-lucide="package-plus" class="w-4 h-4 text-emerald-500"></i><div>Stok Masuk</div>
                   </button>
-                  <button onclick="go('kalkulator-hpp')" class="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-left space-y-1.5 transition">
-                    <i data-lucide="calculator" class="w-4 h-4 text-blue-500"></i><div>Hitung HPP</div>
+                  <button onclick="go('jurnal')" class="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-left space-y-1.5 transition">
+                    <i data-lucide="book-open" class="w-4 h-4 text-blue-500"></i><div>Jurnal Harian</div>
                   </button>
                 </div>
               </div>
@@ -3215,18 +3229,6 @@
             state.stockMovements.unshift({ id: uid('mov'), date: now, type: 'out', source: 'penjualan_barang', productId: p.id, productName: p.nama, qty: it.qty, stockBefore: bef, stockAfter: aft, unitCost: Number(p.hargaBeliSatuan) || 0, totalCost: (Number(p.hargaBeliSatuan) || 0) * it.qty, refNo: inv, notes: `Penjualan ${inv}` });
             logs.push(`${p.nama} (-${it.qty})`);
           }
-        } else {
-          const s = state.services.find(x => x.id === it.refId);
-          (s?.resep || []).forEach(r => {
-            if (!r.productId || !r.qtyPerUnit) return;
-            const p = state.products.find(x => x.id === r.productId);
-            if (!p) return;
-            const use = Number(((Number(r.qtyPerUnit) || 0) * it.qty).toFixed(4));
-            const bef = Number(p.stok) || 0, aft = Number((bef - use).toFixed(4));
-            p.stok = aft;
-            state.stockMovements.unshift({ id: uid('mov'), date: now, type: 'out', source: 'resep_jasa', productId: p.id, productName: p.nama, qty: use, stockBefore: bef, stockAfter: aft, unitCost: Number(p.hargaBeliSatuan) || 0, totalCost: (Number(p.hargaBeliSatuan) || 0) * use, refNo: inv, notes: `Resep ${s.nama} (×${it.qty})` });
-            logs.push(`${p.nama} (-${use} via ${s.nama})`);
-          });
         }
       });
 
@@ -3240,13 +3242,20 @@
       };
       state.sales.unshift(sale);
 
-      const jSale = { type: 'Penjualan', refNo: inv, description: `Penjualan ${sale.customerName} (${sale.items.length} item)`, amount: sale.total, hpp: totalHpp, direction: 'in', paymentMethod: sale.paymentMethod, date: now, meta: { saleId: sale.id } };
-      addJournal(jSale);
-      let jStok = null;
-      if (logs.length) {
-        jStok = { type: 'Stok Keluar', refNo: inv, description: `Potong stok otomatis: ${logs.join(', ')}`, amount: totalHpp, date: now, meta: { saleId: sale.id } };
-        addJournal(jStok);
-      }
+      const jSaleId = uid('jrn');
+      const jSale = { 
+        id: jSaleId, 
+        date: now, 
+        type: 'Penjualan', 
+        refNo: inv, 
+        description: `Penjualan ${sale.customerName} (${sale.items.length} item)`, 
+        direction: 'in', 
+        amount: sale.total, 
+        hpp: totalHpp, 
+        paymentMethod: sale.paymentMethod, 
+        meta: { saleId: sale.id } 
+      };
+      state.journal.unshift(jSale);
 
       Object.assign(ui.pos, { cart: [], customer: '', note: '', discVal: 0, paid: 0 });
       save();
@@ -3256,7 +3265,8 @@
       if (client) {
         (async () => {
           try {
-            await client.from('sales').insert({
+            // 1. Simpan ke tabel sales
+            const { error: errSale } = await client.from('sales').insert({
               id: sale.id,
               invoice_no: sale.invoiceNo,
               date: sale.date,
@@ -3271,7 +3281,9 @@
               change_amount: sale.changeAmount,
               items: sale.items
             });
+            if (errSale) console.error('Supabase sales insert error:', errSale);
 
+            // 2. Simpan ke tabel sales_items
             const itemRows = sale.items.map(it => ({
               sale_id: sale.id,
               invoice_no: sale.invoiceNo,
@@ -3285,20 +3297,22 @@
             }));
             if (itemRows.length) await client.from('sales_items').insert(itemRows);
 
-            const jrnRows = [jSale, ...(jStok ? [jStok] : [])].map(j => ({
-              id: j.id || uid('jrn'),
-              date: j.date || now,
-              type: j.type,
-              ref_no: j.refNo,
-              description: j.description,
-              direction: j.direction,
-              amount: j.amount,
-              hpp: j.hpp || 0,
-              payment_method: j.paymentMethod,
-              meta: j.meta || {}
-            }));
-            await client.from('journal').insert(jrnRows);
+            // 3. Simpan ke tabel journal (Jurnal Keuangan) dengan direction 'in'
+            const { error: errJrn } = await client.from('journal').insert({
+              id: jSale.id,
+              date: jSale.date,
+              type: jSale.type,
+              ref_no: jSale.refNo,
+              description: jSale.description,
+              direction: 'in',
+              amount: jSale.amount,
+              hpp: jSale.hpp,
+              payment_method: jSale.paymentMethod,
+              meta: jSale.meta
+            });
+            if (errJrn) console.error('Supabase journal insert error:', errJrn);
 
+            // 4. Update stok barang di Supabase
             for (const it of sale.items) {
               if (it.type === 'barang' && it.refId) {
                 const prod = state.products.find(p => p.id === it.refId);
@@ -4092,183 +4106,47 @@
     }
 
     // -------------------------------------------------------------------------
-    // 12. HALAMAN 7: KALKULATOR HPP (6 PRESET + RUMUS MARKUP & MARGIN)
+    // 12. PENGELOLAAN HARGA JASA PERCETAKAN (TAMBAH JASA BARU)
     // -------------------------------------------------------------------------
-    function viewHpp(el) {
-      const s = state.services.find(x => x.id === ui.hpp.svcId) || state.services[0];
-      ui.hpp.svcId = s.id;
-      const { bahan, listrik, jasa, hpp } = svcHpp(s);
-      const mk = (Number(s.markupPct) || 0) / 100;
-      const mgPct = Math.min(99, Math.max(0, Number(s.marginPct) || 0));
-      const mg = mgPct / 100;
-
-      // Rumus wajib:
-      // HPP = Total biaya bahan + listrik + jasa
-      // Harga jual markup = HPP × (1 + markup)
-      // Harga jual margin = HPP / (1 - margin)
-      const hMarkup = hpp * (1 + mk);
-      const hMargin = hpp / (1 - mg);
-      const qty = Math.max(1, Number(ui.hpp.qty) || 1);
-
-      el.innerHTML = `
-        <div class="space-y-5">
-          <!-- Pilihan 6 Layanan -->
-          <div class="flex flex-wrap gap-2">
-            ${state.services.map(x => {
-              const active = x.id === s.id;
-              return `
-                <button onclick="ui.hpp.svcId='${x.id}'; render()" class="px-3.5 py-2.5 rounded-xl border text-left transition ${active ? 'bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 border-transparent' : 'bg-white dark:bg-[#111623] border-slate-200/80 dark:border-slate-800 hover:border-amber-400'}">
-                  <div class="text-xs font-bold">${esc(x.nama)}</div>
-                  <div class="font-mono text-[11px] ${active ? 'text-amber-300 dark:text-slate-800' : 'text-slate-400'}">HPP ${rp(svcHpp(x).hpp)}</div>
-                </button>
-              `;
-            }).join('')}
-            <button onclick="openNewSvcModal()" class="px-3.5 py-2.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-500 hover:border-amber-500">+ Jasa Baru</button>
-          </div>
-
-          <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-            <!-- Kiri: Komponen Biaya -->
-            <div class="lg:col-span-6 bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 space-y-4">
-              <div class="flex items-center justify-between">
-                <h3 class="text-sm font-bold">Biaya HPP — ${esc(s.nama)}</h3>
-                <button onclick="resetSvcHpp('${s.id}')" class="text-xs text-slate-400 hover:text-amber-600">Reset Default</button>
-              </div>
-
-              <div class="space-y-2">
-                <div class="flex justify-between text-[11px] font-semibold text-slate-400">
-                  <span>BIAYA BAHAN</span>
-                  <button onclick="addBahan('${s.id}')" class="text-amber-600 dark:text-amber-400 hover:underline">+ Tambah Bahan</button>
-                </div>
-                ${s.bahanItems.map((b, i) => `
-                  <div class="flex items-center gap-2">
-                    <input value="${esc(b.nama)}" onchange="editBahan('${s.id}',${i},'nama',this.value)" class="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs" />
-                    <input type="number" step="any" min="0" value="${b.biaya}" onchange="editBahan('${s.id}',${i},'biaya',this.value)" class="w-28 text-right px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-xs font-semibold" />
-                    <button onclick="delBahan('${s.id}',${i})" class="p-1.5 text-slate-400 hover:text-rose-500"><i data-lucide="x" class="w-4 h-4"></i></button>
-                  </div>
-                `).join('')}
-              </div>
-
-              <div class="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-                <div><label class="block text-slate-400 mb-1">Listrik (Rp)</label><input type="number" step="any" min="0" value="${s.listrik}" onchange="setSvc('${s.id}','listrik',this.value)" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold" /></div>
-                <div><label class="block text-slate-400 mb-1">Jasa / Tenaga (Rp)</label><input type="number" step="any" min="0" value="${s.jasa}" onchange="setSvc('${s.id}','jasa',this.value)" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold" /></div>
-              </div>
-
-              <div class="p-4 rounded-xl bg-slate-900 dark:bg-slate-800/80 text-white flex items-center justify-between">
-                <div>
-                  <div class="text-[11px] text-amber-400 font-mono">HPP = Bahan + Listrik + Jasa</div>
-                  <div class="text-[11px] text-slate-400 font-mono mt-0.5">${rp(bahan)} + ${rp(listrik)} + ${rp(jasa)}</div>
-                </div>
-                <div class="font-mono text-2xl font-extrabold">${rp(hpp)}</div>
-              </div>
-            </div>
-
-            <!-- Kanan: Markup, Margin & Profit Pesanan -->
-            <div class="lg:col-span-6 bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 space-y-4">
-              <h3 class="text-sm font-bold">Harga Jual & Keuntungan</h3>
-
-              <div class="grid grid-cols-3 gap-2.5 text-xs">
-                <div><label class="block text-slate-400 mb-1">Markup (%)</label><input type="number" step="any" min="0" value="${s.markupPct}" onchange="setSvc('${s.id}','markupPct',this.value)" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold" /></div>
-                <div><label class="block text-slate-400 mb-1">Margin (%)</label><input type="number" step="any" min="0" max="99" value="${s.marginPct}" onchange="setSvc('${s.id}','marginPct',Math.min(99,Math.max(0,parseFloat(this.value)||0)))" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold" /></div>
-                <div><label class="block text-amber-600 dark:text-amber-400 font-semibold mb-1">Jml Pesanan</label><input type="number" min="1" value="${qty}" oninput="ui.hpp.qty=Math.max(1,parseInt(this.value)||1); render()" class="w-full px-3 py-2 rounded-xl border border-amber-400 bg-amber-50/40 dark:bg-amber-950/20 font-mono font-bold" /></div>
-              </div>
-
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800 space-y-2">
-                  <div class="flex justify-between items-center"><span class="font-bold text-blue-600 dark:text-blue-400">Markup</span><span class="font-mono text-[10px] text-slate-400">HPP × (1+${s.markupPct}%)</span></div>
-                  <div class="font-mono text-xl font-extrabold">${rp(hMarkup)}</div>
-                  <div class="space-y-1 pt-2 border-t border-slate-200/70 dark:border-slate-800">
-                    <div class="flex justify-between"><span class="text-slate-400">Untung / unit</span><b class="font-mono text-emerald-600">${rp(hMarkup - hpp)}</b></div>
-                    <div class="flex justify-between"><span class="text-slate-400">Untung (${num(qty)} ${esc(s.satuan)})</span><b class="font-mono text-emerald-600">${rp((hMarkup - hpp) * qty)}</b></div>
-                  </div>
-                  <button onclick="applySvcPrice('${s.id}',${Math.round(hMarkup)})" class="w-full py-2 rounded-xl bg-slate-900 dark:bg-blue-600 text-white font-semibold text-[11px] hover:opacity-90">Pakai ke Kasir</button>
-                </div>
-
-                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800 space-y-2">
-                  <div class="flex justify-between items-center"><span class="font-bold text-emerald-600 dark:text-emerald-400">Margin</span><span class="font-mono text-[10px] text-slate-400">HPP / (1-${mgPct}%)</span></div>
-                  <div class="font-mono text-xl font-extrabold">${rp(hMargin)}</div>
-                  <div class="space-y-1 pt-2 border-t border-slate-200/70 dark:border-slate-800">
-                    <div class="flex justify-between"><span class="text-slate-400">Untung / unit</span><b class="font-mono text-emerald-600">${rp(hMargin - hpp)}</b></div>
-                    <div class="flex justify-between"><span class="text-slate-400">Untung (${num(qty)} ${esc(s.satuan)})</span><b class="font-mono text-emerald-600">${rp((hMargin - hpp) * qty)}</b></div>
-                  </div>
-                  <button onclick="applySvcPrice('${s.id}',${Math.round(hMargin)})" class="w-full py-2 rounded-xl bg-emerald-600 text-white font-semibold text-[11px] hover:opacity-90">Pakai ke Kasir</button>
-                </div>
-              </div>
-
-              <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                <span class="text-slate-400">Harga Aktif Kasir: <strong class="font-mono text-slate-900 dark:text-white">${rp(s.hargaJual)}/${esc(s.satuan)}</strong></span>
-                <span class="font-mono font-bold text-emerald-600">Profit ${num(qty)}x: ${rp((s.hargaJual - hpp) * qty)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-
-    function editBahan(id, i, k, v) { const s = state.services.find(x => x.id === id); if (s?.bahanItems[i]) { s.bahanItems[i][k] = k === 'biaya' ? (parseFloat(v) || 0) : v; save(); render(); } }
-    function addBahan(id) { const s = state.services.find(x => x.id === id); if (s) { s.bahanItems.push({ id: uid('b'), nama: 'Bahan baru', biaya: 0 }); save(); render(); } }
-    function delBahan(id, i) { const s = state.services.find(x => x.id === id); if (s) { s.bahanItems.splice(i, 1); save(); render(); } }
-    function setSvc(id, k, v) { const s = state.services.find(x => x.id === id); if (s) { s[k] = parseFloat(v) || 0; save(); render(); } }
-    function applySvcPrice(id, p) { const s = state.services.find(x => x.id === id); if (s) { s.hargaJual = p; s.customPrice = true; save(); toast(`Harga ${s.nama} diperbarui menjadi ${rp(p)}.`); render(); } }
-    function resetSvcHpp(id) {
-      const def = defaultServices().find(x => x.id === id), i = state.services.findIndex(x => x.id === id);
-      if (def && i >= 0) { state.services[i] = { ...state.services[i], bahanItems: def.bahanItems, listrik: def.listrik, jasa: def.jasa }; save(); toast('HPP dikembalikan ke standar.'); render(); }
-    }
     function openNewSvcModal() {
       openModal({
-        title: 'Tambah Jasa Baru', width: 'max-w-sm',
+        title: 'Tambah Jasa Percetakan Baru', width: 'max-w-sm',
         body: `<form id="fSvc" class="space-y-3 text-xs">
-          <div><label class="block font-semibold mb-1">Nama Jasa *</label><input name="nama" required class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
-          <div class="grid grid-cols-2 gap-2"><div><label class="block font-semibold mb-1">Satuan</label><input name="satuan" value="lembar" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div><div><label class="block font-semibold mb-1">Harga Jual</label><input name="harga" type="number" value="5000" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono" /></div></div>
-          <div class="grid grid-cols-3 gap-2"><div><label class="block font-semibold mb-1">Bahan</label><input name="b" type="number" value="1000" class="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono" /></div><div><label class="block font-semibold mb-1">Listrik</label><input name="l" type="number" value="200" class="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono" /></div><div><label class="block font-semibold mb-1">Jasa</label><input name="j" type="number" value="500" class="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono" /></div></div>
+          <div><label class="block font-semibold mb-1">Nama Jasa *</label><input name="nama" placeholder="misal: Cetak Undangan / Banner / Jilid Hardcover" required class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
+          <div class="grid grid-cols-2 gap-2">
+            <div><label class="block font-semibold mb-1">Satuan</label><input name="satuan" value="lembar" placeholder="lembar / buku / pcs" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
+            <div><label class="block font-semibold mb-1">Harga Jual (Rp) *</label><input name="harga" type="number" required value="5000" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold" /></div>
+          </div>
         </form>`,
-        foot: `<button onclick="closeModal()" class="px-3.5 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700">Batal</button><button onclick="saveNewSvc()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950">Simpan</button>`
+        foot: `<button onclick="closeModal()" class="px-3.5 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700">Batal</button><button onclick="saveNewSvc()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950">Simpan Jasa</button>`
       });
     }
+
     function saveNewSvc() {
       const fd = new FormData(document.getElementById('fSvc'));
-      const nama = String(fd.get('nama') || '').trim(); if (!nama) return toast('Nama jasa wajib diisi.', 'warning');
-      const ns = { id: uid('svc'), nama, satuan: fd.get('satuan') || 'unit', aktif: true, bahanItems: [{ id: uid('b'), nama: 'Bahan Utama', biaya: parseFloat(fd.get('b')) || 0 }], listrik: parseFloat(fd.get('l')) || 0, jasa: parseFloat(fd.get('j')) || 0, markupPct: 50, marginPct: 35, hargaJual: parseFloat(fd.get('harga')) || 0, resep: [] };
-      state.services.push(ns); ui.hpp.svcId = ns.id; save(); closeModal(); toast('Jasa baru ditambahkan.'); render();
-    }
+      const nama = String(fd.get('nama') || '').trim();
+      if (!nama) return toast('Nama jasa wajib diisi.', 'warning');
+      const harga = parseFloat(fd.get('harga')) || 0;
+      const satuan = String(fd.get('satuan') || 'lembar').trim();
+      const ns = { id: uid('svc'), nama, satuan, aktif: true, hargaJual: harga, customPrice: true, bahanItems: [], listrik: 0, jasa: 0 };
+      state.services.push(ns);
+      save();
 
-    // -------------------------------------------------------------------------
-    // 13. HALAMAN 8: RESEP BAHAN BAKU
-    // -------------------------------------------------------------------------
-    function viewResep(el) {
-      el.innerHTML = `
-        <div class="space-y-4">
-          <div class="flex flex-wrap items-center justify-between gap-2 bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 text-xs">
-            <span class="text-slate-500">Tautkan bahan baku inventaris ke setiap jasa agar stok terpotong otomatis saat transaksi kasir.</span>
-            <button onclick="autoLinkRecipes(); save(); toast('Auto-tautkan selesai.'); render()" class="px-3.5 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold shrink-0">Auto-Tautkan Bahan</button>
-          </div>
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            ${state.services.map(s => `
-              <div class="bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 space-y-3">
-                <div class="flex items-center justify-between">
-                  <div><h3 class="text-sm font-bold">${esc(s.nama)}</h3><p class="text-[11px] text-slate-400">Konsumsi per 1 ${esc(s.satuan)}</p></div>
-                  <button onclick="addRec('${s.id}')" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-semibold hover:bg-amber-500 hover:text-slate-950">+ Bahan</button>
-                </div>
-                <div class="space-y-2">
-                  ${!(s.resep || []).length ? `<p class="text-xs text-slate-400 py-2">Belum ada bahan tertaut.</p>` : s.resep.map((r, i) => `
-                    <div class="flex items-center gap-2 text-xs">
-                      <select onchange="editRec('${s.id}',${i},'productId',this.value)" class="flex-1 min-w-0 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
-                        <option value="">-- Pilih barang --</option>
-                        ${state.products.map(p => `<option value="${p.id}" ${r.productId === p.id ? 'selected' : ''}>${esc(p.nama)} (Stok ${num(p.stok)})</option>`).join('')}
-                      </select>
-                      <input type="number" step="any" min="0" value="${r.qtyPerUnit}" onchange="editRec('${s.id}',${i},'qtyPerUnit',this.value)" class="w-20 text-right px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold" title="Qty per unit" />
-                      <button onclick="delRec('${s.id}',${i})" class="p-1.5 text-slate-400 hover:text-rose-500"><i data-lucide="x" class="w-4 h-4"></i></button>
-                    </div>
-                  `).join('')}
-                </div>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      `;
+      const client = getSupabase();
+      if (client) {
+        client.from('services').insert({
+          id: ns.id,
+          nama: ns.nama,
+          satuan: ns.satuan,
+          harga_jual: ns.hargaJual,
+          aktif: true
+        }).catch(e => console.error('Supabase service insert error:', e));
+      }
+
+      closeModal();
+      toast(`Jasa "${ns.nama}" berhasil ditambahkan.`);
+      render();
     }
-    function addRec(id) { const s = state.services.find(x => x.id === id); if (s) { (s.resep ||= []).push({ id: uid('r'), label: 'Bahan', productId: '', qtyPerUnit: 1 }); save(); render(); } }
-    function editRec(id, i, k, v) { const s = state.services.find(x => x.id === id); if (s?.resep[i]) { s.resep[i][k] = k === 'qtyPerUnit' ? (parseFloat(v) || 0) : v; save(); render(); } }
-    function delRec(id, i) { const s = state.services.find(x => x.id === id); if (s) { s.resep.splice(i, 1); save(); render(); } }
 
     // -------------------------------------------------------------------------
     // 14. HALAMAN 9: DAFTAR HARGA
@@ -4287,6 +4165,9 @@
               </button>
             </div>
             <div class="flex items-center gap-2">
+              <button onclick="openNewSvcModal()" class="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-xs transition" title="Tambah Jasa Percetakan Baru">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i> + Jasa Baru
+              </button>
               <button onclick="saveAllPricesManual()" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition" title="Simpan permanen ke penyimpanan browser">
                 <i data-lucide="check" class="w-3.5 h-3.5"></i> Simpan Perubahan Harga
               </button>
@@ -4557,9 +4438,81 @@
       `;
     }
 
+    async function deleteSaleRecord(saleId, restoreStock = true) {
+      const sale = state.sales.find(s => s.id === saleId);
+      if (!sale) return toast('Transaksi penjualan tidak ditemukan.', 'error');
+
+      // 1. Kembalikan stok barang jika ada
+      if (restoreStock && Array.isArray(sale.items)) {
+        sale.items.forEach(it => {
+          if (it.type === 'barang' && it.refId) {
+            const p = state.products.find(x => x.id === it.refId);
+            if (p) p.stok = Number(((Number(p.stok) || 0) + it.qty).toFixed(4));
+          }
+        });
+      }
+
+      // 2. Hapus dari state.sales lokal
+      const sIdx = state.sales.findIndex(s => s.id === saleId);
+      if (sIdx !== -1) state.sales.splice(sIdx, 1);
+
+      // 3. Hapus SEMUA catatan jurnal terkait penjualan ini (berdasarkan invoiceNo atau saleId)
+      state.journal = state.journal.filter(j => j.refNo !== sale.invoiceNo && j.meta?.saleId !== saleId);
+
+      // 4. Hapus mutasi stok terkait
+      state.stockMovements = state.stockMovements.filter(m => m.refNo !== sale.invoiceNo);
+
+      save();
+
+      // 5. Sinkronisasi hapus bersih ke Supabase (sales, sales_items, journal, dan update stok)
+      const client = getSupabase();
+      if (client) {
+        try {
+          await client.from('sales').delete().eq('id', saleId);
+          await client.from('sales_items').delete().eq('sale_id', saleId);
+          if (sale.invoiceNo) {
+            await client.from('journal').delete().eq('ref_no', sale.invoiceNo);
+          }
+          if (restoreStock && Array.isArray(sale.items)) {
+            for (const it of sale.items) {
+              if (it.type === 'barang' && it.refId) {
+                const prod = state.products.find(p => p.id === it.refId);
+                if (prod) {
+                  await client.from('products').update({ stok: prod.stok }).eq('id', prod.id);
+                }
+              }
+            }
+          }
+        } catch (errDb) {
+          console.error('Supabase delete sale error:', errDb);
+        }
+      }
+
+      toast(`Transaksi ${sale.invoiceNo} & catatan jurnal berhasil dihapus bersih.`);
+      render();
+    }
+
     function deleteJournalEntry(id) {
       const j = state.journal.find(x => x.id === id);
       if (!j) return toast('Catatan jurnal tidak ditemukan.', 'error');
+
+      // Cek apakah catatan jurnal ini terhubung dengan transaksi Penjualan (Sales)
+      const linkedSale = state.sales.find(s => s.id === j.meta?.saleId || s.invoiceNo === j.refNo);
+
+      if (linkedSale) {
+        confirmDialog(
+          'Hapus Penjualan & Jurnal Terkait?',
+          `Catatan jurnal ini terhubung dengan Penjualan ${linkedSale.invoiceNo} (${linkedSale.customerName} - ${rp(linkedSale.total)}). Menghapus jurnal ini akan sekaligus menghapus transaksi penjualan di database (sales & journal) dan mengembalikan stok barang. Lanjutkan?`,
+          () => {
+            deleteSaleRecord(linkedSale.id, true);
+          },
+          'Ya, Hapus Penjualan & Jurnal',
+          true
+        );
+        return;
+      }
+
+      // Jika jurnal non-penjualan biasa (misal Pengeluaran / Kas Masuk Manual)
       confirmDialog(
         'Hapus Catatan Jurnal?',
         `Apakah Anda yakin ingin menghapus catatan jurnal "${j.description}" (${rp(j.amount)})?`,
@@ -4570,7 +4523,7 @@
             save();
             const client = getSupabase();
             if (client) {
-              client.from('journal').delete().eq('id', id).catch(e => console.error(e));
+              client.from('journal').delete().eq('id', id).then(null, e => console.error(e));
             }
             toast('Catatan jurnal berhasil dihapus.');
             render();
@@ -4584,12 +4537,24 @@
     function clearAllJournal() {
       if (!state.journal || !state.journal.length) return toast('Jurnal sudah kosong.', 'info');
       confirmDialog(
-        'Kosongkan Seluruh Jurnal?',
-        `Semua ${state.journal.length} riwayat catatan jurnal akan dihapus secara permanen. Apakah Anda yakin?`,
-        () => {
+        'Kosongkan Seluruh Jurnal & Penjualan?',
+        `Semua ${state.journal.length} riwayat catatan jurnal dan transaksi penjualan kasir akan dihapus bersih secara permanen dari sistem dan database Supabase. Lanjutkan?`,
+        async () => {
           state.journal = [];
+          state.sales = [];
+          state.stockMovements = [];
           save();
-          toast('Seluruh catatan jurnal berhasil dikosongkan.', 'info');
+          const client = getSupabase();
+          if (client) {
+            try {
+              await client.from('journal').delete().neq('id', '___none___');
+              await client.from('sales').delete().neq('id', '___none___');
+              await client.from('sales_items').delete().neq('id', 0);
+            } catch (e) {
+              console.error(e);
+            }
+          }
+          toast('Seluruh catatan jurnal & transaksi penjualan berhasil dikosongkan.', 'info');
           render();
         },
         'Ya, Kosongkan Semua',
@@ -4732,61 +4697,11 @@
       if (!sale) return toast('Transaksi penjualan tidak ditemukan.', 'error');
       confirmDialog(
         'Hapus Transaksi Penjualan?',
-        `Hapus transaksi ${sale.invoiceNo} (${sale.customerName} - ${rp(sale.total)})? Catatan di jurnal terkait juga akan dibersihkan.${restoreStock ? ' Stok barang akan dikembalikan.' : ''}`,
+        `Hapus transaksi ${sale.invoiceNo} (${sale.customerName} - ${rp(sale.total)})? Catatan di jurnal terkait dan database Supabase juga akan dibersihkan.${restoreStock ? ' Stok barang akan dikembalikan.' : ''}`,
         () => {
-          // 1. Kembalikan stok barang jika ada
-          if (restoreStock && Array.isArray(sale.items)) {
-            sale.items.forEach(it => {
-              if (it.type === 'barang' && it.refId) {
-                const p = state.products.find(x => x.id === it.refId);
-                if (p) p.stok = Number(((Number(p.stok) || 0) + it.qty).toFixed(4));
-              } else if (it.type === 'jasa' && it.refId) {
-                const s = state.services.find(x => x.id === it.refId);
-                (s?.resep || []).forEach(r => {
-                  if (r.productId && r.qtyPerUnit) {
-                    const p = state.products.find(x => x.id === r.productId);
-                    if (p) {
-                      const back = Number(((Number(r.qtyPerUnit) || 0) * it.qty).toFixed(4));
-                      p.stok = Number(((Number(p.stok) || 0) + back).toFixed(4));
-                    }
-                  }
-                });
-              }
-            });
-          }
-
-          // 2. Hapus dari state.sales
-          const sIdx = state.sales.findIndex(s => s.id === saleId);
-          if (sIdx !== -1) state.sales.splice(sIdx, 1);
-
-          // 3. Hapus catatan jurnal terkait
-          state.journal = state.journal.filter(j => j.refNo !== sale.invoiceNo && j.meta?.saleId !== saleId);
-
-          // 4. Hapus mutasi stok terkait
-          state.stockMovements = state.stockMovements.filter(m => m.refNo !== sale.invoiceNo);
-
-          // 5. Sinkronisasi hapus ke Supabase jika terhubung
-          const client = getSupabase();
-          if (client) {
-            client.from('sales').delete().eq('id', saleId).catch(e => console.error(e));
-            if (sale.invoiceNo) {
-              client.from('journal').delete().eq('ref_no', sale.invoiceNo).catch(e => console.error(e));
-            }
-            if (restoreStock && Array.isArray(sale.items)) {
-              sale.items.forEach(it => {
-                if (it.type === 'barang' && it.refId) {
-                  const p = state.products.find(x => x.id === it.refId);
-                  if (p) client.from('products').update({ stok: p.stok }).eq('id', p.id).catch(e => console.error(e));
-                }
-              });
-            }
-          }
-
-          save();
-          toast(`Transaksi ${sale.invoiceNo} berhasil dihapus.`);
-          render();
+          deleteSaleRecord(saleId, restoreStock);
         },
-        'Ya, Hapus Transaksi',
+        'Ya, Hapus Transaksi & Jurnal',
         true
       );
     }
@@ -4818,6 +4733,12 @@
           state.sales = state.sales.filter(s => !saleIds.has(s.id));
           state.journal = state.journal.filter(j => !invNos.has(j.refNo) && !saleIds.has(j.meta?.saleId));
           state.stockMovements = state.stockMovements.filter(m => !invNos.has(m.refNo));
+
+          const client = getSupabase();
+          if (client) {
+            saleIds.forEach(sId => client.from('sales').delete().eq('id', sId).then(null, e => console.error(e)));
+            invNos.forEach(inv => client.from('journal').delete().eq('ref_no', inv).then(null, e => console.error(e)));
+          }
 
           save();
           toast(`Berhasil menghapus ${salesInPeriod.length} transaksi pada periode ${label}.`);
