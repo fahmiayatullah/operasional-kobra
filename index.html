@@ -185,6 +185,8 @@
     const STORE_KEY = 'kobra_hitam_simple_ui_v2';
     const DEFAULT_SHEET_URL = 'https://docs.google.com/spreadsheets/d/17fNVMEWJxoCLs941Z1sLtlclAq8dlGCov_-TxW26ZXQ/edit?usp=sharing';
     const DEFAULT_SHEET_ID = '17fNVMEWJxoCLs941Z1sLtlclAq8dlGCov_-TxW26ZXQ';
+    const DEFAULT_SUPABASE_URL = 'https://haohvszapmqypjatjywt.supabase.co';
+    const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhhb2h2c3phcG1xeXBqYXRqeXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUzNzYyNzcsImV4cCI6MjExMDk1MjI3N30.CgCYaDtSFulN1YO89bg4VpMlOZXPHZL6zKozo-en4rg';
 
     const PAGES = [
       { id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard', group: 'Utama', desc: 'Ringkasan omzet, laba, dan kondisi stok' },
@@ -1605,8 +1607,8 @@
           lowStockThreshold: 10,
           darkMode: false,
           spreadsheetUrl: DEFAULT_SHEET_URL,
-          supabaseUrl: '',
-          supabaseKey: '',
+          supabaseUrl: DEFAULT_SUPABASE_URL,
+          supabaseKey: DEFAULT_SUPABASE_KEY,
           appsScriptUrl: '',
           autoSyncOnOpen: true,
           lastSync: null
@@ -1641,8 +1643,14 @@
         const d = defaultState();
         if (!raw) return d;
         const p = JSON.parse(raw);
+        const s = p.settings || {};
         return {
-          settings: { ...d.settings, ...(p.settings || {}) },
+          settings: {
+            ...d.settings,
+            ...s,
+            supabaseUrl: s.supabaseUrl || DEFAULT_SUPABASE_URL,
+            supabaseKey: s.supabaseKey || DEFAULT_SUPABASE_KEY
+          },
           categories: p.categories?.length ? p.categories : d.categories,
           products: Array.isArray(p.products) && p.products.length ? p.products : d.products,
           services: Array.isArray(p.services) && p.services.length ? p.services : d.services,
@@ -1717,8 +1725,8 @@
 
     function getSupabase() {
       if (sb) return sb;
-      const url = (state.settings.supabaseUrl || '').trim();
-      const key = (state.settings.supabaseKey || '').trim();
+      const url = (state.settings.supabaseUrl || DEFAULT_SUPABASE_URL || '').trim();
+      const key = (state.settings.supabaseKey || DEFAULT_SUPABASE_KEY || '').trim();
       if (url && key && window.supabase && typeof window.supabase.createClient === 'function') {
         try {
           sb = window.supabase.createClient(url, key);
@@ -1832,7 +1840,10 @@
       const label = document.getElementById('sheetsSyncLabel');
       const sideText = document.getElementById('sidebarSyncText');
 
-      if (state.settings.supabaseUrl && state.settings.supabaseKey) {
+      const url = state.settings.supabaseUrl || DEFAULT_SUPABASE_URL;
+      const key = state.settings.supabaseKey || DEFAULT_SUPABASE_KEY;
+
+      if (url && key) {
         if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-ping';
         if (label) label.textContent = 'Supabase Realtime (Aktif)';
         if (sideText) sideText.textContent = `Supabase Cloud (${state.products.length})`;
@@ -4665,7 +4676,9 @@
     // -------------------------------------------------------------------------
     function viewPengaturan(el) {
       const s = state.settings;
-      const isSbConnected = !!(s.supabaseUrl && s.supabaseKey && sb);
+      const effectiveUrl = s.supabaseUrl || DEFAULT_SUPABASE_URL;
+      const effectiveKey = s.supabaseKey || DEFAULT_SUPABASE_KEY;
+      const isSbConnected = !!(effectiveUrl && effectiveKey && sb);
 
       el.innerHTML = `
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
@@ -4683,7 +4696,7 @@
               </div>
               <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold ${isSbConnected ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300'} shrink-0">
                 <span class="w-2 h-2 rounded-full ${isSbConnected ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'}"></span>
-                ${isSbConnected ? 'Supabase Realtime Aktif' : 'Mode Offline / Belum Terhubung'}
+                ${isSbConnected ? 'Supabase Realtime Aktif (Terkoneksi Otomatis)' : 'Mode Offline / Belum Terhubung'}
               </span>
             </div>
 
@@ -4692,7 +4705,7 @@
               <div class="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs flex items-start gap-3">
                 <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-600 shrink-0 mt-0.5"></i>
                 <div>
-                  <b>Supabase Realtime Aktif!</b> Setiap transaksi kasir langsung disimpan ke PostgreSQL cloud. HP Anda akan langsung menerima pembaruan omzet dan struk baru secara otomatis (WebSockets).
+                  <b>Supabase Realtime Aktif!</b> Kredensial URL & Anon Key telah tertanam secara otomatis di sistem. Setiap transaksi kasir langsung tersimpan ke PostgreSQL cloud dan HP Pemilik langsung menerima update omzet & nota secara realtime.
                 </div>
               </div>
             ` : `
@@ -4701,7 +4714,7 @@
                 <div class="space-y-1">
                   <b>Kenapa data kasir dan HP bisa berbeda?</b>
                   <p class="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
-                    Saat ini web masih menyimpan transaksi penjualan dan jurnal di memori lokal masing-masing perangkat. Hubungkan ke <b>Supabase</b> (gratis) agar database tersimpan terpusat dan otomatis sama di semua HP!
+                    Saat ini web masih menyimpan transaksi penjualan dan jurnal di memori lokal masing-masing perangkat. Hubungkan ke <b>Supabase</b> agar database tersimpan terpusat dan otomatis sama di semua HP!
                   </p>
                 </div>
               </div>
@@ -4710,11 +4723,11 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div class="space-y-1">
                 <label class="block font-semibold text-slate-700 dark:text-slate-300">Supabase Project URL</label>
-                <input id="cfgSupabaseUrl" value="${esc(s.supabaseUrl || '')}" placeholder="https://your-project.supabase.co" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-xs" />
+                <input id="cfgSupabaseUrl" value="${esc(s.supabaseUrl || DEFAULT_SUPABASE_URL || '')}" placeholder="https://your-project.supabase.co" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-xs" />
               </div>
               <div class="space-y-1">
                 <label class="block font-semibold text-slate-700 dark:text-slate-300">Supabase Anon Key (Public API Key)</label>
-                <input id="cfgSupabaseKey" value="${esc(s.supabaseKey || '')}" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." type="password" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-xs" />
+                <input id="cfgSupabaseKey" value="${esc(s.supabaseKey || DEFAULT_SUPABASE_KEY || '')}" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." type="password" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-xs" />
               </div>
             </div>
 
