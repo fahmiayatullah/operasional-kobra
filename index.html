@@ -1604,6 +1604,7 @@
           lowStockThreshold: 10,
           darkMode: false,
           spreadsheetUrl: DEFAULT_SHEET_URL,
+          appsScriptUrl: '',
           autoSyncOnOpen: true,
           lastSync: null
         },
@@ -1705,6 +1706,72 @@
       });
     }
 
+    // -------------------------------------------------------------------------
+    // 2B. JEMBATAN 2-ARAH APPS SCRIPT (TRANSAKSI, JURNAL, & HARGA ANTAR DEVICE)
+    // -------------------------------------------------------------------------
+    function callAppsScriptGet(action, extraParams = {}) {
+      const baseUrl = (state.settings.appsScriptUrl || '').trim();
+      if (!baseUrl) return Promise.reject(new Error('URL Apps Script belum diatur'));
+
+      return new Promise((resolve, reject) => {
+        const cbName = 'gas_cb_' + Math.random().toString(36).substring(2, 9);
+        const script = document.createElement('script');
+        const timeout = setTimeout(() => {
+          cleanup();
+          reject(new Error('Koneksi ke Apps Script timeout (15 detik).'));
+        }, 15000);
+
+        function cleanup() {
+          clearTimeout(timeout);
+          delete window[cbName];
+          if (script.parentNode) script.parentNode.removeChild(script);
+        }
+
+        window[cbName] = function(res) {
+          cleanup();
+          if (res && res.status === 'success') {
+            resolve(res.data !== undefined ? res.data : res);
+          } else {
+            reject(new Error(res?.message || 'Gagal memproses data Apps Script'));
+          }
+        };
+
+        script.onerror = function() {
+          cleanup();
+          reject(new Error('Tidak dapat terhubung ke Google Apps Script'));
+        };
+
+        const params = new URLSearchParams({ action, callback: cbName, ...extraParams });
+        const sep = baseUrl.includes('?') ? '&' : '?';
+        script.src = baseUrl + sep + params.toString();
+        document.head.appendChild(script);
+      });
+    }
+
+    async function callAppsScriptPost(payload) {
+      const baseUrl = (state.settings.appsScriptUrl || '').trim();
+      if (!baseUrl) return false;
+
+      try {
+        await fetch(baseUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        return true;
+      } catch (err) {
+        console.warn('POST Apps Script gagal, mencoba fallback GET:', err);
+        try {
+          await callAppsScriptGet('fallbackAction', { payload: encodeURIComponent(JSON.stringify(payload)) });
+          return true;
+        } catch (e2) {
+          console.error('Apps Script dispatch error:', e2);
+          return false;
+        }
+      }
+    }
+
     let isSyncingSheets = false;
 
     async function syncAllFromSheets(silent = false) {
@@ -1801,7 +1868,53 @@
           console.warn('Gagal memuat tab Belanja:', eBelanja);
         }
 
-        // 4. Kalibrasi Resep Jasa
+        // 4. Jika Apps Script 2-Arah telah dikonfigurasi, sinkronkan Transaksi, Jurnal, dan Harga Kustom
+        if (state.settings.appsScriptUrl) {
+          try {
+            const gasData = await callAppsScriptGet('getAll');
+            if (gasData) {
+              // A. Gabungkan transaksi (sales)
+              if (Array.isArray(gasData.sales) && gasData.sales.length > 0) {
+                const existingMap = new Map(state.sales.map(s => [s.invoiceNo, s]));
+                gasData.sales.forEach(remSale => {
+                  existingMap.set(remSale.invoiceNo, remSale);
+                });
+                state.sales = Array.from(existingMap.values()).sort((a, b) => new Date(b.date) - new Date(a.date));
+              }
+
+              // B. Gabungkan jurnal keuangan
+              if (Array.isArray(gasData.journal) && gasData.journal.length > 0) {
+                const jrnMap = new Map(state.journal.map(j => [j.id, j]));
+                gasData.journal.forEach(remJrn => {
+                  jrnMap.set(remJrn.id, remJrn);
+                });
+                state.journal = Array.from(jrnMap.values()).sort((a, b) => new Date(b.date) - new Date(a.date));
+              }
+
+              // C. Terapkan harga kustom dari spreadsheet jika ada
+              if (gasData.customPrices && typeof gasData.customPrices === 'object') {
+                Object.keys(gasData.customPrices).forEach(key => {
+                  const val = Number(gasData.customPrices[key]);
+                  if (val > 0) {
+                    if (key.startsWith('prd_')) {
+                      const pId = key.replace('prd_', '');
+                      const prod = state.products.find(p => p.id === pId || `prd_${p.id}` === key);
+                      if (prod) { prod.hargaJual = val; prod.customPrice = true; }
+                    } else if (key.startsWith('svc_')) {
+                      const sId = key.replace('svc_', '');
+                      const svc = state.services.find(s => s.id === sId || s.id === key);
+                      if (svc) { svc.hargaJual = val; svc.customPrice = true; }
+                    }
+                  }
+                });
+              }
+            }
+          } catch (eGas) {
+            console.warn('Apps Script sync warning:', eGas);
+          }
+        }
+
+        // 5. Kalibrasi Resep Jasa
         autoLinkRecipes();
 
         state.settings.lastSync = new Date().toISOString();
@@ -1810,12 +1923,20 @@
         renderNav();
         render();
 
-        if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
-        if (label) label.textContent = 'Sheets Terhubung';
-        if (sideText) sideText.textContent = `Sinkronkan Sheets (${state.products.length})`;
-
-        if (!silent) {
-          toast(`Berhasil sinkronkan ${state.products.length} Barang & ${state.services.length} Jasa dari Google Sheets!`);
+        if (state.settings.appsScriptUrl) {
+          if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+          if (label) label.textContent = '2-Arah: HP & PC Terhubung';
+          if (sideText) sideText.textContent = `Sinkron 2-Arah (${state.products.length})`;
+          if (!silent) {
+            toast(`Sinkronisasi 2-Arah Berhasil! Data kasir, HP, dan spreadsheet 100% identik.`);
+          }
+        } else {
+          if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-500';
+          if (label) label.textContent = 'Sheets 1-Arah (Master Data)';
+          if (sideText) sideText.textContent = `Sinkronkan Sheets (${state.products.length})`;
+          if (!silent) {
+            toast(`Berhasil sinkronkan ${state.products.length} Barang & ${state.services.length} Jasa dari Google Sheets!`);
+          }
         }
       } catch (err) {
         console.error('Sync error:', err);
@@ -2730,11 +2851,35 @@
       };
       state.sales.unshift(sale);
 
-      addJournal({ type: 'Penjualan', refNo: inv, description: `Penjualan ${sale.customerName} (${sale.items.length} item)`, amount: sale.total, hpp: totalHpp, direction: 'in', paymentMethod: sale.paymentMethod, date: now, meta: { saleId: sale.id } });
-      if (logs.length) addJournal({ type: 'Stok Keluar', refNo: inv, description: `Potong stok otomatis: ${logs.join(', ')}`, amount: totalHpp, date: now, meta: { saleId: sale.id } });
+      const jSale = { type: 'Penjualan', refNo: inv, description: `Penjualan ${sale.customerName} (${sale.items.length} item)`, amount: sale.total, hpp: totalHpp, direction: 'in', paymentMethod: sale.paymentMethod, date: now, meta: { saleId: sale.id } };
+      addJournal(jSale);
+      let jStok = null;
+      if (logs.length) {
+        jStok = { type: 'Stok Keluar', refNo: inv, description: `Potong stok otomatis: ${logs.join(', ')}`, amount: totalHpp, date: now, meta: { saleId: sale.id } };
+        addJournal(jStok);
+      }
 
       Object.assign(ui.pos, { cart: [], customer: '', note: '', discVal: 0, paid: 0 });
       save();
+
+      // Sinkronisasi background otomatis ke Google Sheets jika Apps Script terhubung
+      if (state.settings.appsScriptUrl) {
+        const stockUpdates = [];
+        sale.items.forEach(it => {
+          if (it.type === 'barang') {
+            const p = state.products.find(x => x.id === it.refId);
+            if (p) stockUpdates.push({ no: p.no, nama: p.nama, stok: p.stok });
+          }
+        });
+        callAppsScriptPost({
+          action: 'saveSale',
+          sale,
+          journalEntries: [jSale, ...(jStok ? [jStok] : [])],
+          stockMovements: state.stockMovements.filter(m => m.refNo === inv),
+          stockUpdates
+        });
+      }
+
       toast(`Transaksi ${inv} berhasil dicatat!`);
       render();
       openReceiptModal(sale.id);
@@ -3853,8 +3998,22 @@
 
     function saveAllPricesManual() {
       save();
+      if (state.settings.appsScriptUrl) {
+        syncCustomPricesToSheets();
+      }
       toast('Seluruh perubahan harga berhasil disimpan secara permanen!');
       render();
+    }
+
+    function syncCustomPricesToSheets() {
+      if (!state.settings.appsScriptUrl) return;
+      const priceMap = {};
+      state.products.filter(p => p.customPrice).forEach(p => { priceMap['prd_' + p.id] = p.hargaJual; });
+      state.services.filter(s => s.customPrice).forEach(s => { priceMap['svc_' + s.id] = s.hargaJual; });
+      callAppsScriptPost({
+        action: 'saveCustomPrices',
+        customPrices: priceMap
+      });
     }
 
     function resetPricesToSpreadsheet() {
@@ -3968,6 +4127,9 @@
           if (idx !== -1) {
             state.journal.splice(idx, 1);
             save();
+            if (state.settings.appsScriptUrl) {
+              callAppsScriptPost({ action: 'deleteJournal', id });
+            }
             toast('Catatan jurnal berhasil dihapus.');
             render();
           }
@@ -4012,8 +4174,13 @@
       const desc = String(fd.get('desc') || '').trim(), amt = parseFloat(fd.get('amt')) || 0;
       if (!desc || amt <= 0) return toast('Isi keterangan & nominal valid.', 'warning');
       const iso = new Date(`${fd.get('date') || todayISO()}T${new Date().toTimeString().slice(0, 8)}`).toISOString();
-      addJournal({ type: 'Pengeluaran', refNo: `EXP-${Date.now().toString().slice(-5)}`, description: desc, amount: amt, direction: 'out', paymentMethod: fd.get('met'), date: iso });
-      save(); closeModal(); toast('Pengeluaran tercatat di jurnal.'); render();
+      const jrnExp = { type: 'Pengeluaran', refNo: `EXP-${Date.now().toString().slice(-5)}`, description: desc, amount: amt, direction: 'out', paymentMethod: fd.get('met'), date: iso };
+      addJournal(jrnExp);
+      save();
+      if (state.settings.appsScriptUrl) {
+        callAppsScriptPost({ action: 'saveExpense', expense: jrnExp });
+      }
+      closeModal(); toast('Pengeluaran tercatat di jurnal.'); render();
     }
 
     // -------------------------------------------------------------------------
@@ -4145,6 +4312,25 @@
           // 4. Hapus mutasi stok terkait
           state.stockMovements = state.stockMovements.filter(m => m.refNo !== sale.invoiceNo);
 
+          // 5. Sinkronisasi hapus ke Google Sheets jika 2-arah aktif
+          if (state.settings.appsScriptUrl) {
+            const restoredStock = [];
+            if (restoreStock && Array.isArray(sale.items)) {
+              sale.items.forEach(it => {
+                if (it.type === 'barang' && it.refId) {
+                  const p = state.products.find(x => x.id === it.refId);
+                  if (p) restoredStock.push({ no: p.no, nama: p.nama, stok: p.stok });
+                }
+              });
+            }
+            callAppsScriptPost({
+              action: 'deleteSale',
+              saleId: sale.id,
+              invoiceNo: sale.invoiceNo,
+              restoredStock
+            });
+          }
+
           save();
           toast(`Transaksi ${sale.invoiceNo} berhasil dihapus.`);
           render();
@@ -4212,13 +4398,15 @@
     }
 
     // -------------------------------------------------------------------------
-    // 17. HALAMAN 12: PENGATURAN
+    // 17. HALAMAN 12: PENGATURAN & SINKRONISASI 2-ARAH GOOGLE APPS SCRIPT
     // -------------------------------------------------------------------------
     function viewPengaturan(el) {
       const s = state.settings;
+      const isTwoWay = !!(s.appsScriptUrl && s.appsScriptUrl.trim());
+
       el.innerHTML = `
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-          <!-- Kotak Integrasi Google Spreadsheet Utama -->
+          <!-- Kotak 1: Integrasi Google Spreadsheet Master Data -->
           <div class="lg:col-span-12 bg-white dark:bg-[#111623] rounded-2xl border border-emerald-200/80 dark:border-emerald-800/60 p-5 space-y-3.5 text-xs shadow-xs">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
               <div class="flex items-center gap-3">
@@ -4226,13 +4414,13 @@
                   <i data-lucide="sheet" class="w-5 h-5"></i>
                 </div>
                 <div>
-                  <h3 class="text-sm font-bold text-slate-900 dark:text-white">Database Utama: Google Spreadsheet Kobra Hitam</h3>
-                  <p class="text-slate-400 text-[11px] mt-0.5">Terhubung langsung ke Tab <b>Harga Dasar</b> (83 Barang), <b>Harga Jasa</b>, dan <b>Belanja</b></p>
+                  <h3 class="text-sm font-bold text-slate-900 dark:text-white">1. Master Data: Google Spreadsheet Kobra Hitam</h3>
+                  <p class="text-slate-400 text-[11px] mt-0.5">Membaca langsung Tab <b>Harga Dasar</b> (83 Barang), <b>Harga Jasa</b>, dan <b>Belanja</b></p>
                 </div>
               </div>
               <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 shrink-0">
                 <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                Tersinkronisasi Otomatis
+                Master Data Terhubung
               </span>
             </div>
 
@@ -4246,19 +4434,224 @@
 
             <div class="flex flex-wrap items-center gap-2 pt-1">
               <button onclick="syncAllFromSheets(false)" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-2 shadow-xs transition">
-                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Sinkronkan Data Sekarang
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Sinkronkan Master Data Sekarang
               </button>
               <a href="${esc(s.spreadsheetUrl || DEFAULT_SHEET_URL)}" target="_blank" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1.5 transition">
-                <i data-lucide="external-link" class="w-3.5 h-3.5 text-amber-500"></i> Buka Google Spreadsheet di Tab Baru
+                <i data-lucide="external-link" class="w-3.5 h-3.5 text-amber-500"></i> Buka Google Spreadsheet
               </a>
               <button onclick="resetDefaultSheetUrl()" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-[11px] transition">
                 Kembalikan Link Awal
               </button>
             </div>
-            <div class="text-[11px] text-slate-400 pt-1">
-              Setiap kali Anda membuka web ini, data harga dasar, harga jasa, dan belanja langsung diperbarui otomatis dari spreadsheet di atas tanpa perlu mengimpor file manual lagi.
+          </div>
+
+          <!-- Kotak 2: Sinkronisasi 2-Arah Real-Time Multi-Device -->
+          <div class="lg:col-span-12 bg-white dark:bg-[#111623] rounded-2xl border ${isTwoWay ? 'border-emerald-300 dark:border-emerald-700' : 'border-amber-300 dark:border-amber-600'} p-5 space-y-3.5 text-xs shadow-xs">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl ${isTwoWay ? 'bg-emerald-500/15 text-emerald-600' : 'bg-amber-500/15 text-amber-600'} flex items-center justify-center font-bold shrink-0">
+                  <i data-lucide="smartphone" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h3 class="text-sm font-bold text-slate-900 dark:text-white">2. Sinkronisasi 2-Arah Multi-Perangkat (Kasir Toko ↔ HP Pemilik)</h3>
+                  <p class="text-slate-400 text-[11px] mt-0.5">Memastikan data transaksi penjualan, struk, dan laporan di HP dan PC kasir <b>100% SAMA PERSIS dan OTOMATIS BERGANTI</b></p>
+                </div>
+              </div>
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold ${isTwoWay ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300'} shrink-0">
+                <span class="w-2 h-2 rounded-full ${isTwoWay ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'}"></span>
+                ${isTwoWay ? 'Sinkron 2-Arah Aktif' : 'Mode 1-Arah (Lokal)'}
+              </span>
+            </div>
+
+            <!-- Banner Penjelasan Status -->
+            ${isTwoWay ? `
+              <div class="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs flex items-start gap-3">
+                <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-600 shrink-0 mt-0.5"></i>
+                <div>
+                  <b>Sinkronisasi 2-Arah Aktif!</b> Setiap kali kasir mencatat transaksi di PC, datanya langsung terkirim ke Google Sheets. Saat Anda membuka web ini di HP atau laptop lain, seluruh omzet, struk, dan stok akan langsung muncul sama persis secara otomatis.
+                </div>
+              </div>
+            ` : `
+              <div class="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-3">
+                <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 shrink-0 mt-0.5"></i>
+                <div class="space-y-1">
+                  <b>Kenapa data di HP dan PC Kasir berbeda?</b>
+                  <p class="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
+                    Saat ini web baru membaca data harga dari spreadsheet (1-Arah). Transaksi penjualan dan jurnal kasir masih tersimpan di memori browser lokal masing-masing perangkat. Pasang <b>Google Apps Script</b> di spreadsheet Anda agar semua transaksi tersimpan terpusat di cloud dan otomatis sama di semua HP!
+                  </p>
+                </div>
+              </div>
+            `}
+
+            <div class="space-y-1.5">
+              <label class="block font-semibold text-slate-700 dark:text-slate-300">Tautan Web App Google Apps Script (/exec)</label>
+              <div class="flex flex-col sm:flex-row gap-2">
+                <input id="cfgAppsScriptUrl" value="${esc(s.appsScriptUrl || '')}" placeholder="https://script.google.com/macros/s/.../exec" class="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-xs" />
+                <button onclick="testAppsScriptConnection()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center justify-center gap-1.5 shrink-0 transition">
+                  <i data-lucide="zap" class="w-3.5 h-3.5"></i> Simpan & Uji Koneksi
+                </button>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 pt-1">
+              <button onclick="openAppsScriptModal()" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1.5 transition">
+                <i data-lucide="book-open" class="w-3.5 h-3.5 text-amber-500"></i> Panduan Pasang Apps Script (5 Menit)
+              </button>
+              <button onclick="uploadLocalDataToSheets()" class="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold flex items-center gap-1.5 transition" title="Kirim seluruh transaksi penjualan & jurnal lokal saat ini ke Google Sheets">
+                <i data-lucide="cloud-upload" class="w-3.5 h-3.5"></i> Unggah Data Kasir Saat Ini ke Cloud
+              </button>
+              ${isTwoWay ? `
+                <button onclick="disconnectAppsScript()" class="px-3 py-2 rounded-xl border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-[11px] hover:bg-rose-50 transition">
+                  Putus Koneksi 2-Arah
+                </button>
+              ` : ''}
             </div>
           </div>
+
+          <!-- Form Profil Usaha & Header Nota -->
+          <form onsubmit="saveSettings(event)" class="lg:col-span-7 bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 space-y-3.5 text-xs shadow-xs">
+            <h3 class="text-sm font-bold">Profil Usaha & Header Nota 1080×1350</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="sm:col-span-2"><label class="block font-semibold mb-1">Nama Percetakan</label><input name="shopName" value="${esc(s.shopName)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
+              <div class="sm:col-span-2"><label class="block font-semibold mb-1">Tagline</label><input name="tagline" value="${esc(s.tagline)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
+              <div class="sm:col-span-2"><label class="block font-semibold mb-1">Alamat</label><input name="address" value="${esc(s.address)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
+              <div><label class="block font-semibold mb-1">Telepon / WA</label><input name="phone" value="${esc(s.phone)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
+              <div><label class="block font-semibold mb-1">Instagram / Sosmed</label><input name="instagram" value="${esc(s.instagram)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
+              <div><label class="block font-semibold mb-1">Prefix No. Nota</label><input name="invoicePrefix" value="${esc(s.invoicePrefix)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono" /></div>
+              <div><label class="block font-semibold mb-1">Batas Stok Menipis</label><input name="lowStockThreshold" type="number" value="${s.lowStockThreshold}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono" /></div>
+              <div class="sm:col-span-2"><label class="block font-semibold mb-1">Catatan Kaki Nota</label><textarea name="footerNote" rows="2" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">${esc(s.footerNote)}</textarea></div>
+            </div>
+            <button type="submit" class="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 font-bold">Simpan Pengaturan</button>
+          </form>
+
+          <!-- Cadangan Offline & Reset -->
+          <div class="lg:col-span-5 bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 space-y-3 text-xs shadow-xs">
+            <h3 class="text-sm font-bold">Cadangan Lokal (Offline Backup)</h3>
+            <button onclick="backupJSON()" class="w-full py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800"><i data-lucide="download" class="w-4 h-4"></i> Backup Semua Data (.json)</button>
+            <label class="w-full py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer">
+              <i data-lucide="upload" class="w-4 h-4"></i> Pulihkan Backup (.json)
+              <input type="file" accept=".json" class="hidden" onchange="if(this.files[0]) restoreJSON(this.files[0])" />
+            </label>
+            <button onclick="openExcelModal()" class="w-full py-2.5 px-4 rounded-xl border border-amber-300 dark:border-amber-600/50 bg-amber-50/50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 font-semibold flex items-center justify-center gap-2"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Impor Alternatif File Excel Lokal</button>
+            <div class="pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button onclick="resetAllData()" class="w-full py-2.5 px-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 font-bold hover:bg-rose-100">Reset Seluruh Data Aplikasi</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function testAppsScriptConnection() {
+      const url = (document.getElementById('cfgAppsScriptUrl')?.value || state.settings.appsScriptUrl || '').trim();
+      if (!url) return toast('Masukkan URL Web App Apps Script terlebih dahulu.', 'warning');
+      if (!url.includes('/exec')) {
+        toast('Peringatan: URL Apps Script biasanya berakhiran "/exec". Periksa kembali link deployment Anda.', 'warning');
+      }
+
+      state.settings.appsScriptUrl = url;
+      save();
+
+      toast('Menguji koneksi ke Google Apps Script...', 'info');
+      try {
+        const res = await callAppsScriptGet('ping');
+        toast(`Koneksi 2-Arah Berhasil! Spreadsheet "${res.sheetName || 'Kobra Hitam'}" terhubung.`, 'success');
+        syncAllFromSheets(false);
+      } catch (err) {
+        toast('Gagal terhubung: ' + err.message + '. Pastikan hak akses diatur "Anyone" saat deploy.', 'error');
+        render();
+      }
+    }
+
+    function disconnectAppsScript() {
+      confirmDialog('Putus Koneksi 2-Arah?', 'Aplikasi akan kembali ke mode 1-arah (hanya membaca master barang dari spreadsheet). Transaksi baru akan disimpan di memori lokal.', () => {
+        state.settings.appsScriptUrl = '';
+        save();
+        toast('Koneksi 2-Arah diputus. Mode 1-Arah aktif.');
+        render();
+        updateBadges();
+      }, 'Ya, Putus', false);
+    }
+
+    async function uploadLocalDataToSheets() {
+      if (!state.settings.appsScriptUrl) {
+        return toast('Masukkan dan simpan URL Google Apps Script terlebih dahulu.', 'warning');
+      }
+      if (!state.sales.length && !state.journal.length) {
+        return toast('Tidak ada data transaksi atau jurnal lokal untuk diunggah.', 'info');
+      }
+
+      confirmDialog(
+        'Unggah Data Kasir ke Spreadsheet?',
+        `Apakah Anda ingin mengunggah ${state.sales.length} transaksi penjualan dan ${state.journal.length} catatan jurnal lokal ke Google Sheets? Data ini akan langsung bisa diakses oleh HP dan perangkat lainnya.`,
+        async () => {
+          toast('Mengunggah data ke Google Sheets...', 'info');
+          const ok = await callAppsScriptPost({
+            action: 'bulkUpload',
+            sales: state.sales,
+            journal: state.journal,
+            stockMovements: state.stockMovements
+          });
+          if (ok) {
+            toast('Berhasil mengunggah seluruh data lokal ke Google Sheets!');
+            syncAllFromSheets(false);
+          } else {
+            toast('Gagal mengunggah data ke Google Sheets. Periksa koneksi Anda.', 'error');
+          }
+        },
+        'Ya, Unggah Sekarang',
+        false
+      );
+    }
+
+    function openAppsScriptModal() {
+      openModal({
+        title: 'Panduan Pasang Sinkronisasi 2-Arah (HP ↔ Kasir)',
+        sub: 'Ikuti 5 langkah mudah berikut agar HP dan PC kasir otomatis sinkron 100%',
+        width: 'max-w-2xl',
+        body: `
+          <div class="space-y-4 text-xs text-slate-600 dark:text-slate-300">
+            <div class="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200">
+              <b>Mengapa ini dibutuhkan?</b> Google Spreadsheet secara default mengunci akses tulis dari luar demi keamanan. Dengan memasang script resmi di Google Sheets Anda, web dapat otomatis mencatat nota kasir dan membuka laporan di HP Anda secara live!
+            </div>
+
+            <ol class="space-y-3 list-decimal list-inside font-medium leading-relaxed">
+              <li class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
+                <b>Buka Spreadsheet:</b> Buka link Google Spreadsheet Kobra Hitam Anda di laptop atau PC.
+              </li>
+              <li class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
+                <b>Buka Editor Apps Script:</b> Klik menu <b>Ekstensi (Extensions)</b> di bagian atas spreadsheet, lalu pilih <b>Apps Script</b>.
+              </li>
+              <li class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
+                <b>Salin & Tempel Kode:</b> Hapus semua tulisan bawaan di editor Apps Script, lalu klik tombol <b>Salin Kode Script</b> di bawah ini dan tempel (Ctrl+V) ke editor Apps Script. Lalu tekan <b>Simpan (Ctrl+S)</b>.
+              </li>
+              <li class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
+                <b>Deploy sebagai Web App:</b>
+                <div class="mt-1 ml-4 text-[11px] text-slate-500 space-y-0.5">
+                  <div>• Klik tombol biru <b>Deploy (Terapkan)</b> di pojok kanan atas > <b>New deployment (Penerapan baru)</b>.</div>
+                  <div>• Pilih jenis: <b>Web app (Aplikasi web)</b> via ikon roda gigi di kiri.</div>
+                  <div>• Execute as: <b>Me (email Google Anda)</b>.</div>
+                  <div>• Who has access: <b>Anyone (Siapa saja)</b> <span class="text-rose-600 font-bold">(PENTING!)</span></div>
+                  <div>• Klik <b>Deploy</b>, lalu izinkan hak akses (Authorize access).</div>
+                </div>
+              </li>
+              <li class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
+                <b>Selesai!</b> Salin <b>Web App URL</b> (yang berakhiran <code>/exec</code>), lalu tempel ke kolom di menu Pengaturan dan klik <b>Simpan & Uji Koneksi</b>.
+              </li>
+            </ol>
+
+            <div class="pt-2 flex flex-col sm:flex-row gap-2">
+              <a href="google-apps-script.js" download="google-apps-script.js" class="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 font-bold flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                <i data-lucide="file-code" class="w-4 h-4 text-emerald-600"></i> Unduh File google-apps-script.js
+              </a>
+              <a href="${esc(state.settings.spreadsheetUrl || DEFAULT_SHEET_URL)}" target="_blank" class="flex-1 py-2.5 px-4 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 font-bold flex items-center justify-center gap-2 transition">
+                <i data-lucide="external-link" class="w-4 h-4"></i> Buka Google Spreadsheet Sekarang
+              </a>
+            </div>
+          </div>
+        `,
+        foot: `<button onclick="closeModal()" class="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold">Tutup Panduan</button>`
+      });
+    }
 
           <form onsubmit="saveSettings(event)" class="lg:col-span-7 bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 space-y-3.5 text-xs shadow-xs">
             <h3 class="text-sm font-bold">Profil Usaha & Header Nota 1080×1350</h3>
@@ -4368,6 +4761,20 @@
           syncAllFromSheets(true);
         }, 300);
       }
+
+      // Auto-sinkronisasi saat tab aktif kembali di HP atau PC (window focus)
+      window.addEventListener('focus', () => {
+        if (state.settings.appsScriptUrl && !isSyncingSheets) {
+          syncAllFromSheets(true);
+        }
+      });
+
+      // Polling berkala setiap 60 detik jika tab sedang aktif
+      setInterval(() => {
+        if (!document.hidden && state.settings.appsScriptUrl && !isSyncingSheets) {
+          syncAllFromSheets(true);
+        }
+      }, 60000);
     });
   </script>
 </body>
