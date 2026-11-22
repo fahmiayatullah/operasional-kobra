@@ -30,10 +30,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 
-  <!-- Icons, SheetJS (Excel), jsPDF -->
+  <!-- Icons, SheetJS (Excel), jsPDF, Supabase Realtime -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <style>
     /* Scrollbar minimalis */
@@ -100,9 +101,9 @@
 
     <!-- Tombol Sinkronisasi Spreadsheet -->
     <div class="p-3 border-t border-slate-100 dark:border-slate-800/80 shrink-0 space-y-1.5">
-      <button onclick="syncAllFromSheets(false)" class="w-full py-2 px-3 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-500/25 text-xs font-semibold flex items-center justify-center gap-2 transition shadow-xs">
+      <button onclick="syncAllData(false)" class="w-full py-2 px-3 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-500/25 text-xs font-semibold flex items-center justify-center gap-2 transition shadow-xs">
         <i data-lucide="refresh-cw" class="w-3.5 h-3.5 shrink-0"></i>
-        <span id="sidebarSyncText">Sinkronkan Sheets Live</span>
+        <span id="sidebarSyncText">Sinkronkan Database</span>
       </button>
       <button onclick="openExcelModal()" class="w-full py-1 text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center justify-center gap-1.5">
         <i data-lucide="file-spreadsheet" class="w-3 h-3"></i>
@@ -128,10 +129,10 @@
       </div>
 
       <div class="flex items-center gap-2 shrink-0">
-        <!-- Live Google Sheets Sync Status Button -->
-        <button onclick="syncAllFromSheets(false)" id="sheetsSyncBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 transition shadow-xs" title="Klik untuk sinkronkan ulang live dari Google Sheets">
+        <!-- Live Sync Status Button -->
+        <button onclick="syncAllData(false)" id="sheetsSyncBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 transition shadow-xs" title="Klik untuk sinkronkan data (Supabase / Sheets)">
           <span id="syncDot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span id="sheetsSyncLabel">Google Sheets Live</span>
+          <span id="sheetsSyncLabel">Supabase Realtime</span>
         </button>
         <a href="https://docs.google.com/spreadsheets/d/17fNVMEWJxoCLs941Z1sLtlclAq8dlGCov_-TxW26ZXQ/edit?usp=sharing" target="_blank" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Buka Spreadsheet di Tab Baru">
           <i data-lucide="external-link" class="w-3.5 h-3.5 text-amber-500"></i>
@@ -1604,6 +1605,8 @@
           lowStockThreshold: 10,
           darkMode: false,
           spreadsheetUrl: DEFAULT_SHEET_URL,
+          supabaseUrl: '',
+          supabaseKey: '',
           appsScriptUrl: '',
           autoSyncOnOpen: true,
           lastSync: null
@@ -1707,69 +1710,267 @@
     }
 
     // -------------------------------------------------------------------------
-    // 2B. JEMBATAN 2-ARAH APPS SCRIPT (TRANSAKSI, JURNAL, & HARGA ANTAR DEVICE)
+    // 2B. JEMBATAN SUPABASE POSTGRESQL & REALTIME WEBSOCKETS (MULTI-DEVICE)
     // -------------------------------------------------------------------------
-    function callAppsScriptGet(action, extraParams = {}) {
-      const baseUrl = (state.settings.appsScriptUrl || '').trim();
-      if (!baseUrl) return Promise.reject(new Error('URL Apps Script belum diatur'));
+    let sb = null;
+    let sbRealtimeChannel = null;
 
-      return new Promise((resolve, reject) => {
-        const cbName = 'gas_cb_' + Math.random().toString(36).substring(2, 9);
-        const script = document.createElement('script');
-        const timeout = setTimeout(() => {
-          cleanup();
-          reject(new Error('Koneksi ke Apps Script timeout (15 detik).'));
-        }, 15000);
-
-        function cleanup() {
-          clearTimeout(timeout);
-          delete window[cbName];
-          if (script.parentNode) script.parentNode.removeChild(script);
-        }
-
-        window[cbName] = function(res) {
-          cleanup();
-          if (res && res.status === 'success') {
-            resolve(res.data !== undefined ? res.data : res);
-          } else {
-            reject(new Error(res?.message || 'Gagal memproses data Apps Script'));
-          }
-        };
-
-        script.onerror = function() {
-          cleanup();
-          reject(new Error('Tidak dapat terhubung ke Google Apps Script'));
-        };
-
-        const params = new URLSearchParams({ action, callback: cbName, ...extraParams });
-        const sep = baseUrl.includes('?') ? '&' : '?';
-        script.src = baseUrl + sep + params.toString();
-        document.head.appendChild(script);
-      });
-    }
-
-    async function callAppsScriptPost(payload) {
-      const baseUrl = (state.settings.appsScriptUrl || '').trim();
-      if (!baseUrl) return false;
-
-      try {
-        await fetch(baseUrl, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(payload)
-        });
-        return true;
-      } catch (err) {
-        console.warn('POST Apps Script gagal, mencoba fallback GET:', err);
+    function getSupabase() {
+      if (sb) return sb;
+      const url = (state.settings.supabaseUrl || '').trim();
+      const key = (state.settings.supabaseKey || '').trim();
+      if (url && key && window.supabase && typeof window.supabase.createClient === 'function') {
         try {
-          await callAppsScriptGet('fallbackAction', { payload: encodeURIComponent(JSON.stringify(payload)) });
-          return true;
-        } catch (e2) {
-          console.error('Apps Script dispatch error:', e2);
-          return false;
+          sb = window.supabase.createClient(url, key);
+          initSupabaseRealtime();
+          return sb;
+        } catch (err) {
+          console.error('Inisialisasi Supabase gagal:', err);
+          return null;
         }
       }
+      return null;
+    }
+
+    function initSupabaseRealtime() {
+      if (!sb) return;
+      if (sbRealtimeChannel) {
+        try { sb.removeChannel(sbRealtimeChannel); } catch (e) {}
+      }
+
+      sbRealtimeChannel = sb.channel('kobra_realtime_changes')
+        // 1. Transaksi Penjualan Masuk / Dihapus
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, payload => {
+          if (payload.eventType === 'INSERT') {
+            const r = payload.new;
+            if (!state.sales.some(s => s.invoiceNo === r.invoice_no)) {
+              state.sales.unshift({
+                id: r.id,
+                invoiceNo: r.invoice_no,
+                date: r.date,
+                customerName: r.customer_name || 'Pelanggan Umum',
+                notes: r.notes || '',
+                subtotal: Number(r.subtotal) || 0,
+                discountAmount: Number(r.discount_amount) || 0,
+                total: Number(r.total) || 0,
+                totalHpp: Number(r.total_hpp) || 0,
+                paymentMethod: r.payment_method || 'Tunai',
+                paidAmount: Number(r.paid_amount) || 0,
+                changeAmount: Number(r.change_amount) || 0,
+                items: Array.isArray(r.items) ? r.items : []
+              });
+              save();
+              updateBadges();
+              render();
+              toast(`Transaksi Baru: ${r.invoice_no} (${rp(r.total)})`, 'info');
+            }
+          } else if (payload.eventType === 'DELETE') {
+            const delId = payload.old?.id;
+            if (delId) {
+              const idx = state.sales.findIndex(s => s.id === delId);
+              if (idx !== -1) {
+                state.sales.splice(idx, 1);
+                save();
+                updateBadges();
+                render();
+              }
+            }
+          }
+        })
+        // 2. Jurnal Keuangan Masuk / Dihapus
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'journal' }, payload => {
+          if (payload.eventType === 'INSERT') {
+            const j = payload.new;
+            if (!state.journal.some(x => x.id === j.id)) {
+              state.journal.unshift({
+                id: j.id,
+                date: j.date,
+                type: j.type,
+                refNo: j.ref_no || '-',
+                description: j.description || '',
+                direction: j.direction || 'neutral',
+                amount: Number(j.amount) || 0,
+                hpp: Number(j.hpp) || 0,
+                paymentMethod: j.payment_method || 'Tunai',
+                meta: j.meta || {}
+              });
+              save();
+              render();
+            }
+          } else if (payload.eventType === 'DELETE') {
+            const delId = payload.old?.id;
+            if (delId) {
+              const idx = state.journal.findIndex(x => x.id === delId);
+              if (idx !== -1) {
+                state.journal.splice(idx, 1);
+                save();
+                render();
+              }
+            }
+          }
+        })
+        // 3. Perubahan Stok & Harga Produk Realtime
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'products' }, payload => {
+          const pNew = payload.new;
+          const p = state.products.find(x => x.id === pNew.id);
+          if (p) {
+            p.stok = Number(pNew.stok);
+            p.hargaJual = Number(pNew.harga_jual);
+            if (pNew.custom_price !== undefined) p.customPrice = pNew.custom_price;
+            save();
+            render();
+          }
+        })
+        .subscribe(status => {
+          console.log('Supabase Realtime status:', status);
+          updateSyncBadgeUI();
+        });
+    }
+
+    function updateSyncBadgeUI() {
+      const dot = document.getElementById('syncDot');
+      const label = document.getElementById('sheetsSyncLabel');
+      const sideText = document.getElementById('sidebarSyncText');
+
+      if (state.settings.supabaseUrl && state.settings.supabaseKey) {
+        if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-ping';
+        if (label) label.textContent = 'Supabase Realtime (Aktif)';
+        if (sideText) sideText.textContent = `Supabase Cloud (${state.products.length})`;
+      } else {
+        if (dot) dot.className = 'w-2 h-2 rounded-full bg-amber-500';
+        if (label) label.textContent = 'Sheets 1-Arah (Lokal)';
+        if (sideText) sideText.textContent = `Sinkronkan Sheets (${state.products.length})`;
+      }
+    }
+
+    let isSyncing = false;
+
+    async function syncAllData(silent = false) {
+      if (isSyncing) return;
+      isSyncing = true;
+
+      const client = getSupabase();
+      const dot = document.getElementById('syncDot');
+      const label = document.getElementById('sheetsSyncLabel');
+      const sideText = document.getElementById('sidebarSyncText');
+
+      if (dot) dot.className = 'w-2 h-2 rounded-full bg-amber-500 animate-ping';
+      if (label) label.textContent = 'Menyinkronkan...';
+      if (sideText) sideText.textContent = 'Menyinkronkan...';
+
+      // 1. JIKA SUPABASE TERHUBUNG: Sinkronkan langsung dari PostgreSQL Cloud!
+      if (client) {
+        if (!silent) toast('Menghubungkan ke Supabase Cloud (PostgreSQL)...', 'info');
+        try {
+          // A. Ambil Produk (83 barang)
+          const { data: prods, error: errP } = await client.from('products').select('*').order('no', { ascending: true });
+          if (!errP && prods && prods.length > 0) {
+            state.products = prods.map(p => ({
+              id: p.id,
+              no: p.no,
+              nama: p.nama,
+              tanggalPembelian: p.tanggal_pembelian || '',
+              deskripsi: p.deskripsi || '',
+              stok: Number(p.stok) || 0,
+              isiKemasan: p.isi_kemasan || '',
+              hargaBeli: Number(p.harga_beli) || 0,
+              hargaBeliSatuan: Number(p.harga_beli_satuan) || 0,
+              hargaJual: Number(p.harga_jual) || 0,
+              customPrice: !!p.custom_price,
+              kategoriId: p.kategori_id || 'cat_atk',
+              supplier: p.supplier || '',
+              aktif: p.aktif !== false
+            }));
+          }
+
+          // B. Ambil Jasa (Services)
+          const { data: svcs, error: errS } = await client.from('services').select('*');
+          if (!errS && svcs && svcs.length > 0) {
+            state.services = svcs.map(s => ({
+              id: s.id,
+              nama: s.nama,
+              satuan: s.satuan || 'unit',
+              listrik: Number(s.listrik) || 0,
+              jasa: Number(s.jasa) || 0,
+              markupPct: Number(s.markup_pct) || 50,
+              marginPct: Number(s.margin_pct) || 35,
+              hargaJual: Number(s.harga_jual) || 0,
+              customPrice: !!s.custom_price,
+              aktif: s.aktif !== false,
+              resep: s.resep || [],
+              bahanItems: s.bahan_items || []
+            }));
+          }
+
+          // C. Ambil Belanja
+          const { data: blj, error: errB } = await client.from('belanja').select('*');
+          if (!errB && blj && blj.length > 0) {
+            state.belanja = blj.map(b => ({
+              id: b.id,
+              nama: b.nama,
+              qty: Number(b.qty) || 1,
+              nominal: Number(b.nominal) || 0,
+              biayaSatuan: Number(b.biaya_satuan) || 0
+            }));
+          }
+
+          // D. Ambil Transaksi Penjualan (Sales)
+          const { data: remoteSales, error: errSale } = await client.from('sales').select('*').order('date', { ascending: false }).limit(1000);
+          if (!errSale && remoteSales) {
+            state.sales = remoteSales.map(r => ({
+              id: r.id,
+              invoiceNo: r.invoice_no,
+              date: r.date,
+              customerName: r.customer_name || 'Pelanggan Umum',
+              notes: r.notes || '',
+              subtotal: Number(r.subtotal) || 0,
+              discountAmount: Number(r.discount_amount) || 0,
+              total: Number(r.total) || 0,
+              totalHpp: Number(r.total_hpp) || 0,
+              paymentMethod: r.payment_method || 'Tunai',
+              paidAmount: Number(r.paid_amount) || 0,
+              changeAmount: Number(r.change_amount) || 0,
+              items: Array.isArray(r.items) ? r.items : []
+            }));
+          }
+
+          // E. Ambil Jurnal Keuangan
+          const { data: remoteJrn, error: errJrn } = await client.from('journal').select('*').order('date', { ascending: false }).limit(2000);
+          if (!errJrn && remoteJrn) {
+            state.journal = remoteJrn.map(j => ({
+              id: j.id,
+              date: j.date,
+              type: j.type,
+              refNo: j.ref_no || '-',
+              description: j.description || '',
+              direction: j.direction || 'neutral',
+              amount: Number(j.amount) || 0,
+              hpp: Number(j.hpp) || 0,
+              paymentMethod: j.payment_method || 'Tunai',
+              meta: j.meta || {}
+            }));
+          }
+
+          autoLinkRecipes();
+          state.settings.lastSync = new Date().toISOString();
+          save();
+          updateBadges();
+          renderNav();
+          render();
+          updateSyncBadgeUI();
+
+          if (!silent) toast(`Berhasil sinkronkan Supabase! ${state.products.length} barang, ${state.sales.length} transaksi.`, 'success');
+          isSyncing = false;
+          return;
+        } catch (errSupabase) {
+          console.error('Supabase sync error:', errSupabase);
+          if (!silent) toast('Koneksi Supabase bermasalah: ' + errSupabase.message + '. Membaca data spreadsheet...', 'warning');
+        }
+      }
+
+      // 2. JIKA SUPABASE BELUM DIATUR: Gunakan Google Sheets Read-Only sebagai Fallback
+      await syncAllFromSheets(silent);
+      isSyncing = false;
     }
 
     let isSyncingSheets = false;
@@ -2862,22 +3063,66 @@
       Object.assign(ui.pos, { cart: [], customer: '', note: '', discVal: 0, paid: 0 });
       save();
 
-      // Sinkronisasi background otomatis ke Google Sheets jika Apps Script terhubung
-      if (state.settings.appsScriptUrl) {
-        const stockUpdates = [];
-        sale.items.forEach(it => {
-          if (it.type === 'barang') {
-            const p = state.products.find(x => x.id === it.refId);
-            if (p) stockUpdates.push({ no: p.no, nama: p.nama, stok: p.stok });
+      // Simpan ke Supabase PostgreSQL secara real-time
+      const client = getSupabase();
+      if (client) {
+        (async () => {
+          try {
+            await client.from('sales').insert({
+              id: sale.id,
+              invoice_no: sale.invoiceNo,
+              date: sale.date,
+              customer_name: sale.customerName,
+              notes: sale.notes,
+              subtotal: sale.subtotal,
+              discount_amount: sale.discountAmount,
+              total: sale.total,
+              total_hpp: sale.totalHpp,
+              payment_method: sale.paymentMethod,
+              paid_amount: sale.paidAmount,
+              change_amount: sale.changeAmount,
+              items: sale.items
+            });
+
+            const itemRows = sale.items.map(it => ({
+              sale_id: sale.id,
+              invoice_no: sale.invoiceNo,
+              ref_id: it.refId || '',
+              nama: it.nama,
+              type: it.type,
+              qty: it.qty,
+              harga: it.harga,
+              hpp_unit: it.hppUnit || 0,
+              subtotal: it.subtotal
+            }));
+            if (itemRows.length) await client.from('sales_items').insert(itemRows);
+
+            const jrnRows = [jSale, ...(jStok ? [jStok] : [])].map(j => ({
+              id: j.id || uid('jrn'),
+              date: j.date || now,
+              type: j.type,
+              ref_no: j.refNo,
+              description: j.description,
+              direction: j.direction,
+              amount: j.amount,
+              hpp: j.hpp || 0,
+              payment_method: j.paymentMethod,
+              meta: j.meta || {}
+            }));
+            await client.from('journal').insert(jrnRows);
+
+            for (const it of sale.items) {
+              if (it.type === 'barang' && it.refId) {
+                const prod = state.products.find(p => p.id === it.refId);
+                if (prod) {
+                  await client.from('products').update({ stok: prod.stok }).eq('id', prod.id);
+                }
+              }
+            }
+          } catch (eDb) {
+            console.error('Supabase write error:', eDb);
           }
-        });
-        callAppsScriptPost({
-          action: 'saveSale',
-          sale,
-          journalEntries: [jSale, ...(jStok ? [jStok] : [])],
-          stockMovements: state.stockMovements.filter(m => m.refNo === inv),
-          stockUpdates
-        });
+        })();
       }
 
       toast(`Transaksi ${inv} berhasil dicatat!`);
@@ -3998,22 +4243,30 @@
 
     function saveAllPricesManual() {
       save();
-      if (state.settings.appsScriptUrl) {
-        syncCustomPricesToSheets();
+      const client = getSupabase();
+      if (client) {
+        toast('Menyimpan perubahan harga ke Supabase...', 'info');
+        (async () => {
+          try {
+            for (const p of state.products) {
+              if (p.customPrice) {
+                await client.from('products').update({ harga_jual: p.hargaJual, custom_price: true }).eq('id', p.id);
+              }
+            }
+            for (const s of state.services) {
+              if (s.customPrice) {
+                await client.from('services').update({ harga_jual: s.hargaJual, custom_price: true }).eq('id', s.id);
+              }
+            }
+            toast('Seluruh perubahan harga tersimpan di Supabase!');
+          } catch (e) {
+            console.error('Save price error:', e);
+          }
+        })();
+      } else {
+        toast('Seluruh perubahan harga berhasil disimpan secara permanen di browser!');
       }
-      toast('Seluruh perubahan harga berhasil disimpan secara permanen!');
       render();
-    }
-
-    function syncCustomPricesToSheets() {
-      if (!state.settings.appsScriptUrl) return;
-      const priceMap = {};
-      state.products.filter(p => p.customPrice).forEach(p => { priceMap['prd_' + p.id] = p.hargaJual; });
-      state.services.filter(s => s.customPrice).forEach(s => { priceMap['svc_' + s.id] = s.hargaJual; });
-      callAppsScriptPost({
-        action: 'saveCustomPrices',
-        customPrices: priceMap
-      });
     }
 
     function resetPricesToSpreadsheet() {
@@ -4127,8 +4380,9 @@
           if (idx !== -1) {
             state.journal.splice(idx, 1);
             save();
-            if (state.settings.appsScriptUrl) {
-              callAppsScriptPost({ action: 'deleteJournal', id });
+            const client = getSupabase();
+            if (client) {
+              client.from('journal').delete().eq('id', id).catch(e => console.error(e));
             }
             toast('Catatan jurnal berhasil dihapus.');
             render();
@@ -4177,8 +4431,19 @@
       const jrnExp = { type: 'Pengeluaran', refNo: `EXP-${Date.now().toString().slice(-5)}`, description: desc, amount: amt, direction: 'out', paymentMethod: fd.get('met'), date: iso };
       addJournal(jrnExp);
       save();
-      if (state.settings.appsScriptUrl) {
-        callAppsScriptPost({ action: 'saveExpense', expense: jrnExp });
+      const client = getSupabase();
+      if (client) {
+        client.from('journal').insert({
+          id: uid('jrn'),
+          date: iso,
+          type: 'Pengeluaran',
+          ref_no: jrnExp.refNo,
+          description: desc,
+          direction: 'out',
+          amount: amt,
+          hpp: 0,
+          payment_method: fd.get('met')
+        }).catch(e => console.error('Supabase exp error:', e));
       }
       closeModal(); toast('Pengeluaran tercatat di jurnal.'); render();
     }
@@ -4312,23 +4577,21 @@
           // 4. Hapus mutasi stok terkait
           state.stockMovements = state.stockMovements.filter(m => m.refNo !== sale.invoiceNo);
 
-          // 5. Sinkronisasi hapus ke Google Sheets jika 2-arah aktif
-          if (state.settings.appsScriptUrl) {
-            const restoredStock = [];
+          // 5. Sinkronisasi hapus ke Supabase jika terhubung
+          const client = getSupabase();
+          if (client) {
+            client.from('sales').delete().eq('id', saleId).catch(e => console.error(e));
+            if (sale.invoiceNo) {
+              client.from('journal').delete().eq('ref_no', sale.invoiceNo).catch(e => console.error(e));
+            }
             if (restoreStock && Array.isArray(sale.items)) {
               sale.items.forEach(it => {
                 if (it.type === 'barang' && it.refId) {
                   const p = state.products.find(x => x.id === it.refId);
-                  if (p) restoredStock.push({ no: p.no, nama: p.nama, stok: p.stok });
+                  if (p) client.from('products').update({ stok: p.stok }).eq('id', p.id).catch(e => console.error(e));
                 }
               });
             }
-            callAppsScriptPost({
-              action: 'deleteSale',
-              saleId: sale.id,
-              invoiceNo: sale.invoiceNo,
-              restoredStock
-            });
           }
 
           save();
@@ -4398,113 +4661,110 @@
     }
 
     // -------------------------------------------------------------------------
-    // 17. HALAMAN 12: PENGATURAN & SINKRONISASI 2-ARAH GOOGLE APPS SCRIPT
+    // 17. HALAMAN 12: PENGATURAN & DATABASE SUPABASE (POSTGRESQL CLOUD & REALTIME)
     // -------------------------------------------------------------------------
     function viewPengaturan(el) {
       const s = state.settings;
-      const isTwoWay = !!(s.appsScriptUrl && s.appsScriptUrl.trim());
+      const isSbConnected = !!(s.supabaseUrl && s.supabaseKey && sb);
 
       el.innerHTML = `
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-          <!-- Kotak 1: Integrasi Google Spreadsheet Master Data -->
-          <div class="lg:col-span-12 bg-white dark:bg-[#111623] rounded-2xl border border-emerald-200/80 dark:border-emerald-800/60 p-5 space-y-3.5 text-xs shadow-xs">
+          <!-- KOTAK 1: INTEGRASI UTAMA DATABASE SUPABASE (POSTGRESQL REALTIME) -->
+          <div class="lg:col-span-12 bg-white dark:bg-[#111623] rounded-2xl border ${isSbConnected ? 'border-emerald-300 dark:border-emerald-700' : 'border-amber-300 dark:border-amber-700'} p-5 space-y-3.5 text-xs shadow-xs">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
               <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold shrink-0">
-                  <i data-lucide="sheet" class="w-5 h-5"></i>
+                <div class="w-10 h-10 rounded-xl ${isSbConnected ? 'bg-emerald-500/15 text-emerald-600' : 'bg-amber-500/15 text-amber-600'} flex items-center justify-center font-bold shrink-0">
+                  <i data-lucide="database" class="w-5 h-5"></i>
                 </div>
                 <div>
-                  <h3 class="text-sm font-bold text-slate-900 dark:text-white">1. Master Data: Google Spreadsheet Kobra Hitam</h3>
-                  <p class="text-slate-400 text-[11px] mt-0.5">Membaca langsung Tab <b>Harga Dasar</b> (83 Barang), <b>Harga Jasa</b>, dan <b>Belanja</b></p>
+                  <h3 class="text-sm font-bold text-slate-900 dark:text-white">Database Utama: Supabase (PostgreSQL Cloud & Realtime)</h3>
+                  <p class="text-slate-400 text-[11px] mt-0.5">Sinkronisasi sub-detik antar <b>Komputer Kasir Toko ↔ HP Pemilik</b> tanpa perlu refresh!</p>
                 </div>
               </div>
-              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 shrink-0">
-                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                Master Data Terhubung
-              </span>
-            </div>
-
-            <div class="space-y-1.5">
-              <label class="block font-semibold text-slate-700 dark:text-slate-300">Tautan (URL) Google Spreadsheet</label>
-              <div class="flex flex-col sm:flex-row gap-2">
-                <input id="cfgSheetUrl" value="${esc(s.spreadsheetUrl || DEFAULT_SHEET_URL)}" class="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-xs" />
-                <button onclick="updateSheetUrl()" class="px-4 py-2 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 font-bold shrink-0">Simpan URL</button>
-              </div>
-            </div>
-
-            <div class="flex flex-wrap items-center gap-2 pt-1">
-              <button onclick="syncAllFromSheets(false)" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-2 shadow-xs transition">
-                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Sinkronkan Master Data Sekarang
-              </button>
-              <a href="${esc(s.spreadsheetUrl || DEFAULT_SHEET_URL)}" target="_blank" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1.5 transition">
-                <i data-lucide="external-link" class="w-3.5 h-3.5 text-amber-500"></i> Buka Google Spreadsheet
-              </a>
-              <button onclick="resetDefaultSheetUrl()" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-[11px] transition">
-                Kembalikan Link Awal
-              </button>
-            </div>
-          </div>
-
-          <!-- Kotak 2: Sinkronisasi 2-Arah Real-Time Multi-Device -->
-          <div class="lg:col-span-12 bg-white dark:bg-[#111623] rounded-2xl border ${isTwoWay ? 'border-emerald-300 dark:border-emerald-700' : 'border-amber-300 dark:border-amber-600'} p-5 space-y-3.5 text-xs shadow-xs">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl ${isTwoWay ? 'bg-emerald-500/15 text-emerald-600' : 'bg-amber-500/15 text-amber-600'} flex items-center justify-center font-bold shrink-0">
-                  <i data-lucide="smartphone" class="w-5 h-5"></i>
-                </div>
-                <div>
-                  <h3 class="text-sm font-bold text-slate-900 dark:text-white">2. Sinkronisasi 2-Arah Multi-Perangkat (Kasir Toko ↔ HP Pemilik)</h3>
-                  <p class="text-slate-400 text-[11px] mt-0.5">Memastikan data transaksi penjualan, struk, dan laporan di HP dan PC kasir <b>100% SAMA PERSIS dan OTOMATIS BERGANTI</b></p>
-                </div>
-              </div>
-              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold ${isTwoWay ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300'} shrink-0">
-                <span class="w-2 h-2 rounded-full ${isTwoWay ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'}"></span>
-                ${isTwoWay ? 'Sinkron 2-Arah Aktif' : 'Mode 1-Arah (Lokal)'}
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold ${isSbConnected ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300'} shrink-0">
+                <span class="w-2 h-2 rounded-full ${isSbConnected ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'}"></span>
+                ${isSbConnected ? 'Supabase Realtime Aktif' : 'Mode Offline / Belum Terhubung'}
               </span>
             </div>
 
             <!-- Banner Penjelasan Status -->
-            ${isTwoWay ? `
+            ${isSbConnected ? `
               <div class="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs flex items-start gap-3">
                 <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-600 shrink-0 mt-0.5"></i>
                 <div>
-                  <b>Sinkronisasi 2-Arah Aktif!</b> Setiap kali kasir mencatat transaksi di PC, datanya langsung terkirim ke Google Sheets. Saat Anda membuka web ini di HP atau laptop lain, seluruh omzet, struk, dan stok akan langsung muncul sama persis secara otomatis.
+                  <b>Supabase Realtime Aktif!</b> Setiap transaksi kasir langsung disimpan ke PostgreSQL cloud. HP Anda akan langsung menerima pembaruan omzet dan struk baru secara otomatis (WebSockets).
                 </div>
               </div>
             ` : `
               <div class="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-3">
                 <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 shrink-0 mt-0.5"></i>
                 <div class="space-y-1">
-                  <b>Kenapa data di HP dan PC Kasir berbeda?</b>
+                  <b>Kenapa data kasir dan HP bisa berbeda?</b>
                   <p class="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
-                    Saat ini web baru membaca data harga dari spreadsheet (1-Arah). Transaksi penjualan dan jurnal kasir masih tersimpan di memori browser lokal masing-masing perangkat. Pasang <b>Google Apps Script</b> di spreadsheet Anda agar semua transaksi tersimpan terpusat di cloud dan otomatis sama di semua HP!
+                    Saat ini web masih menyimpan transaksi penjualan dan jurnal di memori lokal masing-masing perangkat. Hubungkan ke <b>Supabase</b> (gratis) agar database tersimpan terpusat dan otomatis sama di semua HP!
                   </p>
                 </div>
               </div>
             `}
 
-            <div class="space-y-1.5">
-              <label class="block font-semibold text-slate-700 dark:text-slate-300">Tautan Web App Google Apps Script (/exec)</label>
-              <div class="flex flex-col sm:flex-row gap-2">
-                <input id="cfgAppsScriptUrl" value="${esc(s.appsScriptUrl || '')}" placeholder="https://script.google.com/macros/s/.../exec" class="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-xs" />
-                <button onclick="testAppsScriptConnection()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center justify-center gap-1.5 shrink-0 transition">
-                  <i data-lucide="zap" class="w-3.5 h-3.5"></i> Simpan & Uji Koneksi
-                </button>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="space-y-1">
+                <label class="block font-semibold text-slate-700 dark:text-slate-300">Supabase Project URL</label>
+                <input id="cfgSupabaseUrl" value="${esc(s.supabaseUrl || '')}" placeholder="https://your-project.supabase.co" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-xs" />
+              </div>
+              <div class="space-y-1">
+                <label class="block font-semibold text-slate-700 dark:text-slate-300">Supabase Anon Key (Public API Key)</label>
+                <input id="cfgSupabaseKey" value="${esc(s.supabaseKey || '')}" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." type="password" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-xs" />
               </div>
             </div>
 
             <div class="flex flex-wrap items-center gap-2 pt-1">
-              <button onclick="openAppsScriptModal()" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1.5 transition">
-                <i data-lucide="book-open" class="w-3.5 h-3.5 text-amber-500"></i> Panduan Pasang Apps Script (5 Menit)
+              <button onclick="testSupabaseConnection()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-xs transition">
+                <i data-lucide="zap" class="w-3.5 h-3.5"></i> Simpan & Uji Koneksi Supabase
               </button>
-              <button onclick="uploadLocalDataToSheets()" class="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold flex items-center gap-1.5 transition" title="Kirim seluruh transaksi penjualan & jurnal lokal saat ini ke Google Sheets">
-                <i data-lucide="cloud-upload" class="w-3.5 h-3.5"></i> Unggah Data Kasir Saat Ini ke Cloud
+              <button onclick="openSupabaseModal()" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1.5 transition">
+                <i data-lucide="book-open" class="w-3.5 h-3.5 text-amber-500"></i> Panduan Setup Supabase (Langkah demi Langkah)
               </button>
-              ${isTwoWay ? `
-                <button onclick="disconnectAppsScript()" class="px-3 py-2 rounded-xl border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-[11px] hover:bg-rose-50 transition">
-                  Putus Koneksi 2-Arah
+              <a href="supabase-schema.sql" download="supabase-schema.sql" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1.5 transition">
+                <i data-lucide="download" class="w-3.5 h-3.5 text-emerald-600"></i> Unduh File supabase-schema.sql
+              </a>
+              <button onclick="migrateAllToSupabase()" class="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold flex items-center gap-1.5 transition" title="Kirim data barang, penjualan, dan jurnal lokal saat ini ke database Supabase">
+                <i data-lucide="cloud-upload" class="w-3.5 h-3.5"></i> Migrasikan Data Kasir ke Supabase
+              </button>
+              ${isSbConnected ? `
+                <button onclick="disconnectSupabase()" class="px-3 py-2 rounded-xl border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-[11px] hover:bg-rose-50 transition">
+                  Putus Koneksi Supabase
                 </button>
               ` : ''}
+            </div>
+          </div>
+
+          <!-- KOTAK 2: INTEGRASI MASTER DATA GOOGLE SPREADSHEET (REFERENSI AWAL) -->
+          <div class="lg:col-span-12 bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 space-y-3 text-xs shadow-xs">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center font-bold shrink-0">
+                  <i data-lucide="sheet" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h3 class="text-sm font-bold text-slate-900 dark:text-white">Sumber Referensi Awal: Google Spreadsheet Kobra Hitam</h3>
+                  <p class="text-slate-400 text-[11px] mt-0.5">Tautan master data awal: <b>Harga Dasar (83 Barang)</b>, <b>Harga Jasa</b>, dan <b>Belanja</b></p>
+                </div>
+              </div>
+              <a href="${esc(s.spreadsheetUrl || DEFAULT_SHEET_URL)}" target="_blank" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 transition">
+                <i data-lucide="external-link" class="w-3.5 h-3.5 text-amber-500"></i> Buka Google Spreadsheet
+              </a>
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="block font-semibold text-slate-700 dark:text-slate-300">Tautan (URL) Google Spreadsheet</label>
+              <div class="flex flex-col sm:flex-row gap-2">
+                <input id="cfgSheetUrl" value="${esc(s.spreadsheetUrl || DEFAULT_SHEET_URL)}" class="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-xs" />
+                <button onclick="updateSheetUrl()" class="px-4 py-2 rounded-xl bg-slate-900 dark:bg-slate-800 text-white font-bold shrink-0">Simpan URL</button>
+                <button onclick="syncAllFromSheets(false)" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1.5 transition">
+                  <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Tarik Ulang dari Spreadsheet
+                </button>
+              </div>
             </div>
           </div>
 
@@ -4541,147 +4801,168 @@
       `;
     }
 
-    async function testAppsScriptConnection() {
-      const url = (document.getElementById('cfgAppsScriptUrl')?.value || state.settings.appsScriptUrl || '').trim();
-      if (!url) return toast('Masukkan URL Web App Apps Script terlebih dahulu.', 'warning');
-      if (!url.includes('/exec')) {
-        toast('Peringatan: URL Apps Script biasanya berakhiran "/exec". Periksa kembali link deployment Anda.', 'warning');
-      }
+    async function testSupabaseConnection() {
+      const url = (document.getElementById('cfgSupabaseUrl')?.value || state.settings.supabaseUrl || '').trim();
+      const key = (document.getElementById('cfgSupabaseKey')?.value || state.settings.supabaseKey || '').trim();
 
-      state.settings.appsScriptUrl = url;
+      if (!url || !key) return toast('Harap isi Project URL dan Anon Key Supabase.', 'warning');
+
+      state.settings.supabaseUrl = url;
+      state.settings.supabaseKey = key;
       save();
 
-      toast('Menguji koneksi ke Google Apps Script...', 'info');
+      toast('Menguji koneksi ke Supabase PostgreSQL...', 'info');
+      sb = null; // reset client
+      const client = getSupabase();
+      if (!client) return toast('Format URL atau Key Supabase tidak valid.', 'error');
+
       try {
-        const res = await callAppsScriptGet('ping');
-        toast(`Koneksi 2-Arah Berhasil! Spreadsheet "${res.sheetName || 'Kobra Hitam'}" terhubung.`, 'success');
-        syncAllFromSheets(false);
+        const { count, error } = await client.from('products').select('*', { count: 'exact', head: true });
+        if (error) throw error;
+        toast(`Koneksi Berhasil! Database Supabase terhubung (${count || 0} barang terdaftar).`, 'success');
+        syncAllData(false);
       } catch (err) {
-        toast('Gagal terhubung: ' + err.message + '. Pastikan hak akses diatur "Anyone" saat deploy.', 'error');
+        toast('Gagal terhubung ke Supabase: ' + err.message + '. Pastikan Anda telah menjalankan supabase-schema.sql di SQL Editor.', 'error');
         render();
       }
     }
 
-    function disconnectAppsScript() {
-      confirmDialog('Putus Koneksi 2-Arah?', 'Aplikasi akan kembali ke mode 1-arah (hanya membaca master barang dari spreadsheet). Transaksi baru akan disimpan di memori lokal.', () => {
-        state.settings.appsScriptUrl = '';
+    function disconnectSupabase() {
+      confirmDialog('Putus Koneksi Supabase?', 'Aplikasi akan kembali ke mode lokal offline. Transaksi baru tidak akan tersinkronisasi ke cloud sampai dihubungkan kembali.', () => {
+        state.settings.supabaseUrl = '';
+        state.settings.supabaseKey = '';
+        sb = null;
+        if (sbRealtimeChannel) {
+          try { sb.removeChannel(sbRealtimeChannel); } catch (e) {}
+        }
         save();
-        toast('Koneksi 2-Arah diputus. Mode 1-Arah aktif.');
+        toast('Koneksi Supabase diputus. Mode lokal aktif.');
         render();
         updateBadges();
       }, 'Ya, Putus', false);
     }
 
-    async function uploadLocalDataToSheets() {
-      if (!state.settings.appsScriptUrl) {
-        return toast('Masukkan dan simpan URL Google Apps Script terlebih dahulu.', 'warning');
-      }
-      if (!state.sales.length && !state.journal.length) {
-        return toast('Tidak ada data transaksi atau jurnal lokal untuk diunggah.', 'info');
-      }
+    async function migrateAllToSupabase() {
+      const client = getSupabase();
+      if (!client) return toast('Hubungkan ke Supabase terlebih dahulu sebelum migrasi.', 'warning');
 
       confirmDialog(
-        'Unggah Data Kasir ke Spreadsheet?',
-        `Apakah Anda ingin mengunggah ${state.sales.length} transaksi penjualan dan ${state.journal.length} catatan jurnal lokal ke Google Sheets? Data ini akan langsung bisa diakses oleh HP dan perangkat lainnya.`,
+        'Migrasikan Data ke Supabase?',
+        `Data ${state.products.length} barang, ${state.sales.length} transaksi, dan ${state.journal.length} catatan jurnal lokal akan diunggah ke Supabase. Lanjutkan?`,
         async () => {
-          toast('Mengunggah data ke Google Sheets...', 'info');
-          const ok = await callAppsScriptPost({
-            action: 'bulkUpload',
-            sales: state.sales,
-            journal: state.journal,
-            stockMovements: state.stockMovements
-          });
-          if (ok) {
-            toast('Berhasil mengunggah seluruh data lokal ke Google Sheets!');
-            syncAllFromSheets(false);
-          } else {
-            toast('Gagal mengunggah data ke Google Sheets. Periksa koneksi Anda.', 'error');
+          toast('Sedang mengunggah data ke Supabase Cloud...', 'info');
+          try {
+            // 1. Upload Produk
+            if (state.products.length) {
+              const pRows = state.products.map(p => ({
+                id: p.id,
+                no: p.no,
+                nama: p.nama,
+                tanggal_pembelian: p.tanggalPembelian || '',
+                deskripsi: p.deskripsi || '',
+                stok: Number(p.stok) || 0,
+                isi_kemasan: p.isiKemasan || '',
+                harga_beli: Number(p.hargaBeli) || 0,
+                harga_beli_satuan: Number(p.hargaBeliSatuan) || 0,
+                harga_jual: Number(p.hargaJual) || 0,
+                custom_price: !!p.customPrice,
+                kategori_id: p.kategoriId || 'cat_atk',
+                supplier: p.supplier || '',
+                aktif: p.aktif !== false
+              }));
+              await client.from('products').upsert(pRows, { onConflict: 'id' });
+            }
+
+            // 2. Upload Sales
+            if (state.sales.length) {
+              const sRows = state.sales.map(s => ({
+                id: s.id,
+                invoice_no: s.invoiceNo,
+                date: s.date,
+                customer_name: s.customerName,
+                notes: s.notes || '',
+                subtotal: Number(s.subtotal) || 0,
+                discount_amount: Number(s.discountAmount) || 0,
+                total: Number(s.total) || 0,
+                total_hpp: Number(s.totalHpp) || 0,
+                payment_method: s.paymentMethod || 'Tunai',
+                paid_amount: Number(s.paidAmount) || 0,
+                change_amount: Number(s.changeAmount) || 0,
+                items: s.items || []
+              }));
+              await client.from('sales').upsert(sRows, { onConflict: 'id' });
+            }
+
+            // 3. Upload Journal
+            if (state.journal.length) {
+              const jRows = state.journal.map(j => ({
+                id: j.id,
+                date: j.date,
+                type: j.type,
+                ref_no: j.refNo || '-',
+                description: j.description || '',
+                direction: j.direction || 'neutral',
+                amount: Number(j.amount) || 0,
+                hpp: Number(j.hpp) || 0,
+                payment_method: j.paymentMethod || 'Tunai',
+                meta: j.meta || {}
+              }));
+              await client.from('journal').upsert(jRows, { onConflict: 'id' });
+            }
+
+            toast('Migrasi Berhasil! Seluruh data Anda kini berada di Supabase Cloud.', 'success');
+            syncAllData(false);
+          } catch (err) {
+            toast('Gagal migrasi: ' + err.message, 'error');
           }
         },
-        'Ya, Unggah Sekarang',
+        'Ya, Migrasikan Sekarang',
         false
       );
     }
 
-    function openAppsScriptModal() {
+    function openSupabaseModal() {
       openModal({
-        title: 'Panduan Pasang Sinkronisasi 2-Arah (HP ↔ Kasir)',
-        sub: 'Ikuti 5 langkah mudah berikut agar HP dan PC kasir otomatis sinkron 100%',
+        title: 'Panduan Praktis Setup Database Supabase',
+        sub: 'Database cloud PostgreSQL gratis & super cepat dengan sinkronisasi realtime',
         width: 'max-w-2xl',
         body: `
           <div class="space-y-4 text-xs text-slate-600 dark:text-slate-300">
-            <div class="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200">
-              <b>Mengapa ini dibutuhkan?</b> Google Spreadsheet secara default mengunci akses tulis dari luar demi keamanan. Dengan memasang script resmi di Google Sheets Anda, web dapat otomatis mencatat nota kasir dan membuka laporan di HP Anda secara live!
+            <div class="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200">
+              <b>Mengapa Supabase?</b> Supabase memberikan database PostgreSQL cloud profesional (gratis) dengan fitur Realtime WebSockets. Setiap kali kasir input penjualan di PC, data otomatis terkirim dan HP pemilik langsung terupdate dalam hitungan milidetik tanpa perlu reload!
             </div>
 
             <ol class="space-y-3 list-decimal list-inside font-medium leading-relaxed">
               <li class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
-                <b>Buka Spreadsheet:</b> Buka link Google Spreadsheet Kobra Hitam Anda di laptop atau PC.
+                <b>Buat Akun & Project:</b> Buka <a href="https://supabase.com" target="_blank" class="text-emerald-600 dark:text-emerald-400 font-bold underline">supabase.com</a>, daftar/login (gratis), lalu klik <b>New Project</b>. Beri nama misal <code>Kobra Hitam POS</code> dan atur password database Anda.
               </li>
               <li class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
-                <b>Buka Editor Apps Script:</b> Klik menu <b>Ekstensi (Extensions)</b> di bagian atas spreadsheet, lalu pilih <b>Apps Script</b>.
+                <b>Jalankan SQL Schema:</b> Klik menu <b>SQL Editor</b> di bilah kiri Supabase > klik <b>New Query</b>. Unduh dan buka file <code>supabase-schema.sql</code>, salin seluruh kodenya, tempel ke editor Supabase, lalu klik tombol hijau <b>RUN</b>. (Semua tabel & 83 barang langsung terbuat otomatis).
               </li>
               <li class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
-                <b>Salin & Tempel Kode:</b> Hapus semua tulisan bawaan di editor Apps Script, lalu klik tombol <b>Salin Kode Script</b> di bawah ini dan tempel (Ctrl+V) ke editor Apps Script. Lalu tekan <b>Simpan (Ctrl+S)</b>.
-              </li>
-              <li class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
-                <b>Deploy sebagai Web App:</b>
-                <div class="mt-1 ml-4 text-[11px] text-slate-500 space-y-0.5">
-                  <div>• Klik tombol biru <b>Deploy (Terapkan)</b> di pojok kanan atas > <b>New deployment (Penerapan baru)</b>.</div>
-                  <div>• Pilih jenis: <b>Web app (Aplikasi web)</b> via ikon roda gigi di kiri.</div>
-                  <div>• Execute as: <b>Me (email Google Anda)</b>.</div>
-                  <div>• Who has access: <b>Anyone (Siapa saja)</b> <span class="text-rose-600 font-bold">(PENTING!)</span></div>
-                  <div>• Klik <b>Deploy</b>, lalu izinkan hak akses (Authorize access).</div>
+                <b>Salin Kredensial API:</b> Buka menu <b>Project Settings (ikon gear)</b> di kiri bawah > pilih <b>Data API</b>. Salin:
+                <div class="mt-1 ml-4 text-[11px] text-slate-500 font-mono space-y-0.5">
+                  <div>1. <b>Project URL</b> (contoh: <code>https://xyzcompany.supabase.co</code>)</div>
+                  <div>2. <b>anon / public key</b> (contoh: <code>eyJhbGciOi...</code>)</div>
                 </div>
               </li>
               <li class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
-                <b>Selesai!</b> Salin <b>Web App URL</b> (yang berakhiran <code>/exec</code>), lalu tempel ke kolom di menu Pengaturan dan klik <b>Simpan & Uji Koneksi</b>.
+                <b>Selesai!</b> Tempelkan Project URL dan Anon Key tersebut ke form di menu Pengaturan web ini, lalu klik <b>Simpan & Uji Koneksi</b>. Seluruh HP dan komputer Anda kini otomatis terhubung 100%!
               </li>
             </ol>
 
             <div class="pt-2 flex flex-col sm:flex-row gap-2">
-              <a href="google-apps-script.js" download="google-apps-script.js" class="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 font-bold flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
-                <i data-lucide="file-code" class="w-4 h-4 text-emerald-600"></i> Unduh File google-apps-script.js
+              <a href="supabase-schema.sql" download="supabase-schema.sql" class="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 font-bold flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                <i data-lucide="download" class="w-4 h-4 text-emerald-600"></i> Unduh File supabase-schema.sql
               </a>
-              <a href="${esc(state.settings.spreadsheetUrl || DEFAULT_SHEET_URL)}" target="_blank" class="flex-1 py-2.5 px-4 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 font-bold flex items-center justify-center gap-2 transition">
-                <i data-lucide="external-link" class="w-4 h-4"></i> Buka Google Spreadsheet Sekarang
+              <a href="https://supabase.com/dashboard" target="_blank" class="flex-1 py-2.5 px-4 rounded-xl bg-slate-900 dark:bg-emerald-600 text-white font-bold flex items-center justify-center gap-2 transition">
+                <i data-lucide="external-link" class="w-4 h-4"></i> Buka Dashboard Supabase
               </a>
             </div>
           </div>
         `,
         foot: `<button onclick="closeModal()" class="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold">Tutup Panduan</button>`
       });
-    }
-
-          <form onsubmit="saveSettings(event)" class="lg:col-span-7 bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 space-y-3.5 text-xs shadow-xs">
-            <h3 class="text-sm font-bold">Profil Usaha & Header Nota 1080×1350</h3>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div class="sm:col-span-2"><label class="block font-semibold mb-1">Nama Percetakan</label><input name="shopName" value="${esc(s.shopName)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
-              <div class="sm:col-span-2"><label class="block font-semibold mb-1">Tagline</label><input name="tagline" value="${esc(s.tagline)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
-              <div class="sm:col-span-2"><label class="block font-semibold mb-1">Alamat</label><input name="address" value="${esc(s.address)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
-              <div><label class="block font-semibold mb-1">Telepon / WA</label><input name="phone" value="${esc(s.phone)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
-              <div><label class="block font-semibold mb-1">Instagram / Sosmed</label><input name="instagram" value="${esc(s.instagram)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
-              <div><label class="block font-semibold mb-1">Prefix No. Nota</label><input name="invoicePrefix" value="${esc(s.invoicePrefix)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono" /></div>
-              <div><label class="block font-semibold mb-1">Batas Stok Menipis</label><input name="lowStockThreshold" type="number" value="${s.lowStockThreshold}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono" /></div>
-              <div class="sm:col-span-2"><label class="block font-semibold mb-1">Catatan Kaki Nota</label><textarea name="footerNote" rows="2" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">${esc(s.footerNote)}</textarea></div>
-            </div>
-            <button type="submit" class="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 font-bold">Simpan Pengaturan</button>
-          </form>
-
-          <div class="lg:col-span-5 bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 space-y-3 text-xs shadow-xs">
-            <h3 class="text-sm font-bold">Cadangan Lokal (Offline Backup)</h3>
-            <button onclick="backupJSON()" class="w-full py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800"><i data-lucide="download" class="w-4 h-4"></i> Backup Semua Data (.json)</button>
-            <label class="w-full py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer">
-              <i data-lucide="upload" class="w-4 h-4"></i> Pulihkan Backup (.json)
-              <input type="file" accept=".json" class="hidden" onchange="if(this.files[0]) restoreJSON(this.files[0])" />
-            </label>
-            <button onclick="openExcelModal()" class="w-full py-2.5 px-4 rounded-xl border border-amber-300 dark:border-amber-600/50 bg-amber-50/50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 font-semibold flex items-center justify-center gap-2"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Impor Alternatif File Excel Lokal</button>
-            <div class="pt-3 border-t border-slate-100 dark:border-slate-800">
-              <button onclick="resetAllData()" class="w-full py-2.5 px-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 font-bold hover:bg-rose-100">Reset Seluruh Data Aplikasi</button>
-            </div>
-          </div>
-        </div>
-      `;
     }
 
     function updateSheetUrl() {
@@ -4755,24 +5036,27 @@
       render();
       document.getElementById('modalWrap').addEventListener('click', e => { if (e.target.id === 'modalWrap') closeModal(); });
       
-      // Auto-sinkronisasi dari Google Sheets secara otomatis pada saat web dibuka
+      // Inisialisasi Supabase Client jika kredensial sudah ada
+      getSupabase();
+
+      // Auto-sinkronisasi data (dari Supabase jika ada, atau Google Sheets fallback)
       if (state.settings.autoSyncOnOpen !== false) {
         setTimeout(() => {
-          syncAllFromSheets(true);
+          syncAllData(true);
         }, 300);
       }
 
       // Auto-sinkronisasi saat tab aktif kembali di HP atau PC (window focus)
       window.addEventListener('focus', () => {
-        if (state.settings.appsScriptUrl && !isSyncingSheets) {
-          syncAllFromSheets(true);
+        if (!isSyncing) {
+          syncAllData(true);
         }
       });
 
-      // Polling berkala setiap 60 detik jika tab sedang aktif
+      // Polling berkala jika tab aktif
       setInterval(() => {
-        if (!document.hidden && state.settings.appsScriptUrl && !isSyncingSheets) {
-          syncAllFromSheets(true);
+        if (!document.hidden && !isSyncing) {
+          syncAllData(true);
         }
       }, 60000);
     });
