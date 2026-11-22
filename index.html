@@ -3907,30 +3907,90 @@
                 ${types.map(t => `<option value="${t}" ${ui.jrn.type === t ? 'selected' : ''}>${t === 'all' ? 'Semua Jenis Jurnal' : t}</option>`).join('')}
               </select>
             </div>
-            <button onclick="openExpenseModal()" class="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shrink-0">+ Catat Pengeluaran</button>
+            <div class="flex items-center gap-2 shrink-0">
+              <button onclick="clearAllJournal()" class="px-3 py-2 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center gap-1.5 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition" title="Hapus seluruh riwayat jurnal">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Kosongkan Jurnal
+              </button>
+              <button onclick="openExpenseModal()" class="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shrink-0">+ Catat Pengeluaran</button>
+            </div>
           </div>
 
-          <div class="bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden">
+          <div class="bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden shadow-xs">
             ${!rows.length ? `<p class="p-10 text-center text-xs text-slate-400">Belum ada catatan jurnal. Transaksi kasir, stok, dan pengeluaran akan muncul otomatis di sini.</p>` : `
               <div class="overflow-x-auto"><table class="w-full text-xs text-left">
-                <thead class="bg-slate-50 dark:bg-slate-900/60 text-slate-500"><tr><th class="p-3">Waktu</th><th class="p-3">Jenis</th><th class="p-3">Ref</th><th class="p-3">Keterangan</th><th class="p-3 text-right">Nominal</th><th class="p-3 text-center">Nota</th></tr></thead>
+                <thead class="bg-slate-50 dark:bg-slate-900/60 text-slate-500 border-b border-slate-100 dark:border-slate-800">
+                  <tr>
+                    <th class="p-3 font-semibold">Waktu</th>
+                    <th class="p-3 font-semibold">Jenis</th>
+                    <th class="p-3 font-semibold">Ref</th>
+                    <th class="p-3 font-semibold">Keterangan</th>
+                    <th class="p-3 font-semibold text-right">Nominal</th>
+                    <th class="p-3 font-semibold text-center">Nota</th>
+                    <th class="p-3 font-semibold text-center">Aksi</th>
+                  </tr>
+                </thead>
                 <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
                   ${rows.map(j => `
-                    <tr>
+                    <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition">
                       <td class="p-3 whitespace-nowrap text-slate-400">${fmtDT(j.date)}</td>
                       <td class="p-3"><span class="px-2 py-0.5 rounded-md text-[10px] font-bold ${badge(j.type)}">${esc(j.type)}</span></td>
                       <td class="p-3 font-mono text-slate-400">${esc(j.refNo)}</td>
-                      <td class="p-3">${esc(j.description)}</td>
+                      <td class="p-3 font-medium text-slate-800 dark:text-slate-100">${esc(j.description)}</td>
                       <td class="p-3 text-right font-mono font-bold ${j.direction === 'in' ? 'text-emerald-600' : j.direction === 'out' ? 'text-rose-500' : ''}">${rp(j.amount)}</td>
                       <td class="p-3 text-center">${j.meta?.saleId ? `<button onclick="openReceiptModal('${j.meta.saleId}')" class="text-amber-600 dark:text-amber-400 font-semibold hover:underline">Buka</button>` : '-'}</td>
+                      <td class="p-3 text-center">
+                        <button onclick="deleteJournalEntry('${j.id}')" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition" title="Hapus catatan jurnal ini">
+                          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                      </td>
                     </tr>
                   `).join('')}
                 </tbody>
               </table></div>
+              <div class="px-4 py-2.5 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-[11px] text-slate-400">
+                <span>Menampilkan <strong>${rows.length}</strong> dari total ${state.journal.length} catatan jurnal</span>
+                <span>Total Nominal Ditampilkan: <strong class="font-mono text-slate-700 dark:text-slate-200">${rp(rows.reduce((s, j) => s + (Number(j.amount) || 0), 0))}</strong></span>
+              </div>
             `}
           </div>
         </div>
       `;
+    }
+
+    function deleteJournalEntry(id) {
+      const j = state.journal.find(x => x.id === id);
+      if (!j) return toast('Catatan jurnal tidak ditemukan.', 'error');
+      confirmDialog(
+        'Hapus Catatan Jurnal?',
+        `Apakah Anda yakin ingin menghapus catatan jurnal "${j.description}" (${rp(j.amount)})?`,
+        () => {
+          const idx = state.journal.findIndex(x => x.id === id);
+          if (idx !== -1) {
+            state.journal.splice(idx, 1);
+            save();
+            toast('Catatan jurnal berhasil dihapus.');
+            render();
+          }
+        },
+        'Ya, Hapus Jurnal',
+        true
+      );
+    }
+
+    function clearAllJournal() {
+      if (!state.journal || !state.journal.length) return toast('Jurnal sudah kosong.', 'info');
+      confirmDialog(
+        'Kosongkan Seluruh Jurnal?',
+        `Semua ${state.journal.length} riwayat catatan jurnal akan dihapus secara permanen. Apakah Anda yakin?`,
+        () => {
+          state.journal = [];
+          save();
+          toast('Seluruh catatan jurnal berhasil dikosongkan.', 'info');
+          render();
+        },
+        'Ya, Kosongkan Semua',
+        true
+      );
     }
 
     function openExpenseModal() {
