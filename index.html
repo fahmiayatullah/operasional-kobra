@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>Kobra Hitam — Sistem Operasional Percetakan (Live Google Sheets)</title>
 
   <!-- Tailwind CSS -->
@@ -2973,7 +2976,7 @@
                       </div>
                       <div class="text-right shrink-0">
                         <div class="font-mono font-bold">${rp(s.total)}</div>
-                        <button onclick="openReceiptModal('${s.id}')" class="text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:underline">Nota</button>
+                        <button onclick="openReceiptModal('${s.id}')" class="text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:underline">Struk</button>
                       </div>
                     </div>
                   `).join('')}
@@ -3164,7 +3167,7 @@
               </div>
 
               <button onclick="checkout()" class="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition">
-                <i data-lucide="check-circle-2" class="w-4 h-4"></i> Bayar & Cetak Nota
+                <i data-lucide="check-circle-2" class="w-4 h-4"></i> Bayar & Cetak Struk
               </button>
             </div>
           </div>
@@ -3333,205 +3336,332 @@
     }
 
     // -------------------------------------------------------------------------
-    // 8. NOTA PROFESIONAL 1080×1350 (JPEG & PDF + CETAK STRUK)
+    // 8. NOTA STRUK THERMAL RESMI (JPG & PDF + CETAK STRUK)
     // -------------------------------------------------------------------------
     async function drawReceiptCanvas(sale) {
       if (document.fonts?.ready) { try { await document.fonts.ready; } catch {} }
-      const cv = document.createElement('canvas');
-      cv.width = 1080; cv.height = 1350;
-      const ctx = cv.getContext('2d');
-      const W = 1080, H = 1350, px = 76;
 
-      const rr = (x, y, w, h, r) => {
-        ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-        ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-        ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-        ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+      const W = 722;
+      const px = 82;
+      const contentW = W - px * 2; // 558
+
+      const settings = state.settings || {};
+      const shopName = String(settings.shopName || 'PERCETAKAN KOBRA HITAM').trim();
+      const address = String(settings.address || '').trim();
+      const phone = String(settings.phone || '').trim();
+      const footerNote = String(settings.footerNote || 'Terima kasih atas kepercayaan Anda. Simpan\nnota ini sebagai bukti pembayaran resmi.').trim();
+
+      // Helper pemecah teks per baris dan pembungkus kata
+      const wrapText = (txt, mw, font, ctxTemp) => {
+        ctxTemp.font = font;
+        const rawLines = String(txt || '').split('\n');
+        const res = [];
+        for (const raw of rawLines) {
+          const words = raw.trim().split(/\s+/);
+          let line = '';
+          for (const w of words) {
+            if (!w) continue;
+            const test = line ? `${line} ${w}` : w;
+            if (ctxTemp.measureText(test).width > mw && line) {
+              res.push(line);
+              line = w;
+            } else {
+              line = test;
+            }
+          }
+          if (line) res.push(line);
+        }
+        return res;
       };
-      const wrap = (txt, mw, f) => {
-        ctx.font = f; const words = String(txt || '').split(/\s+/), lines = []; let l = '';
-        for (const w of words) { const t = l ? `${l} ${w}` : w; if (ctx.measureText(t).width > mw && l) { lines.push(l); l = w; } else l = t; }
-        if (l) lines.push(l); return lines;
-      };
 
-      // Background
-      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, W, H);
+      // Buat dummy canvas untuk menghitung tinggi konten secara presisi
+      const dcv = document.createElement('canvas');
+      dcv.width = W; dcv.height = 100;
+      const dctx = dcv.getContext('2d');
 
-      // Header Bersih Obsidian + Aksen Emas
-      ctx.fillStyle = '#0F172A'; ctx.fillRect(0, 0, W, 232);
-      ctx.fillStyle = '#F59E0B'; ctx.fillRect(0, 232, W, 6);
-
-      // Emblem
-      rr(px, 56, 80, 80, 20); ctx.fillStyle = '#F59E0B'; ctx.fill();
-      ctx.strokeStyle = '#0F172A'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      ctx.beginPath(); ctx.arc(px + 40, 92, 20, Math.PI * 0.85, Math.PI * 0.15, false); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(px + 30, 92); ctx.lineTo(px + 37, 96); ctx.lineTo(px + 30, 100); ctx.moveTo(px + 50, 92); ctx.lineTo(px + 43, 96); ctx.lineTo(px + 50, 100); ctx.moveTo(px + 40, 102); ctx.lineTo(px + 40, 118); ctx.stroke();
-
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#FFFFFF'; ctx.font = '800 32px "Plus Jakarta Sans", Inter, sans-serif';
-      ctx.fillText(state.settings.shopName || 'PERCETAKAN KOBRA HITAM', px + 100, 90);
-      ctx.fillStyle = '#FBBF24'; ctx.font = '600 18px "Plus Jakarta Sans", Inter, sans-serif';
-      ctx.fillText(state.settings.tagline || '', px + 100, 120);
-      ctx.fillStyle = '#CBD5E1'; ctx.font = '400 16px "Plus Jakarta Sans", Inter, sans-serif';
-      ctx.fillText(state.settings.address || '', px + 100, 156);
-      ctx.fillText(`Telp/WA: ${state.settings.phone || '-'}  •  ${state.settings.instagram || ''}`, px + 100, 184);
-
-      ctx.textAlign = 'right';
-      ctx.fillStyle = '#F59E0B'; ctx.font = '700 15px "Plus Jakarta Sans", Inter, sans-serif';
-      ctx.fillText('NOTA RESMI', W - px, 82);
-      ctx.fillStyle = '#FFFFFF'; ctx.font = '700 24px "JetBrains Mono", monospace';
-      ctx.fillText(sale.invoiceNo, W - px, 116);
-      ctx.fillStyle = '#94A3B8'; ctx.font = '500 16px "Plus Jakarta Sans", Inter, sans-serif';
-      ctx.fillText(fmtDT(sale.date), W - px, 148);
-      rr(W - px - 104, 166, 104, 32, 16); ctx.fillStyle = 'rgba(16,185,129,0.2)'; ctx.fill();
-      ctx.fillStyle = '#34D399'; ctx.font = '700 14px "Plus Jakarta Sans", Inter, sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('✓ LUNAS', W - px - 52, 187);
-
-      // Info Pelanggan
-      rr(px, 274, W - px * 2, 100, 16); ctx.fillStyle = '#F8FAFC'; ctx.fill();
-      ctx.strokeStyle = '#E2E8F0'; ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.textAlign = 'left'; ctx.fillStyle = '#64748B'; ctx.font = '600 14px "Plus Jakarta Sans", Inter, sans-serif';
-      ctx.fillText('PELANGGAN', px + 26, 310);
-      ctx.fillStyle = '#0F172A'; ctx.font = '700 23px "Plus Jakarta Sans", Inter, sans-serif';
-      ctx.fillText(sale.customerName || 'Pelanggan Umum', px + 26, 346);
-      ctx.textAlign = 'right'; ctx.fillStyle = '#64748B'; ctx.font = '600 14px "Plus Jakarta Sans", Inter, sans-serif';
-      ctx.fillText('PEMBAYARAN', W - px - 26, 310);
-      ctx.fillStyle = '#0F172A'; ctx.font = '700 23px "Plus Jakarta Sans", Inter, sans-serif';
-      ctx.fillText(sale.paymentMethod || 'Tunai', W - px - 26, 346);
-
-      // Tabel Item
-      const ty = 410;
-      rr(px, ty, W - px * 2, 48, 12); ctx.fillStyle = '#0F172A'; ctx.fill();
-      ctx.fillStyle = '#FFFFFF'; ctx.font = '700 15px "Plus Jakarta Sans", Inter, sans-serif';
-      ctx.textAlign = 'left'; ctx.fillText('DESKRIPSI ITEM', px + 22, ty + 30);
-      ctx.textAlign = 'center'; ctx.fillText('QTY', px + 510, ty + 30);
-      ctx.textAlign = 'right'; ctx.fillText('HARGA', px + 705, ty + 30);
-      ctx.fillText('SUBTOTAL', W - px - 22, ty + 30);
-
+      const addrLines = wrapText(address, contentW, '500 17px "JetBrains Mono", monospace', dctx);
       const items = sale.items || [];
-      const rowH = items.length > 8 ? Math.max(42, Math.floor(460 / items.length)) : 56;
-      const fs = items.length > 8 ? 17 : 19;
-      let y = ty + 54;
-      items.slice(0, 11).forEach((it, idx) => {
-        if (idx % 2 === 1) { ctx.fillStyle = '#F8FAFC'; ctx.fillRect(px, y, W - px * 2, rowH); }
-        ctx.strokeStyle = '#E2E8F0'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px, y + rowH); ctx.lineTo(W - px, y + rowH); ctx.stroke();
-        const my = y + Math.round(rowH * 0.62);
-        ctx.textAlign = 'left'; ctx.fillStyle = '#0F172A'; ctx.font = `600 ${fs}px "Plus Jakarta Sans", Inter, sans-serif`;
-        let nm = (it.type === 'jasa' ? '[Jasa] ' : '') + it.nama;
-        while (ctx.measureText(nm).width > 420 && nm.length > 10) nm = nm.slice(0, -2) + '…';
-        ctx.fillText(nm, px + 22, my);
-        ctx.textAlign = 'center'; ctx.fillStyle = '#334155'; ctx.font = `600 ${fs - 1}px "JetBrains Mono", monospace`;
-        ctx.fillText(String(it.qty), px + 510, my);
-        ctx.textAlign = 'right'; ctx.fillStyle = '#475569'; ctx.fillText(rp(it.harga), px + 705, my);
-        ctx.fillStyle = '#0F172A'; ctx.font = `700 ${fs - 1}px "JetBrains Mono", monospace`; ctx.fillText(rp(it.subtotal), W - px - 22, my);
-        y += rowH;
-      });
-      if (items.length > 11) {
-        ctx.textAlign = 'left'; ctx.fillStyle = '#64748B'; ctx.font = 'italic 15px "Plus Jakarta Sans", Inter, sans-serif';
-        ctx.fillText(`+ ${items.length - 11} item lainnya`, px + 22, y + 26);
+      const footLines = wrapText(footerNote, contentW, '500 15px "JetBrains Mono", monospace', dctx);
+
+      // Hitung estimasi tinggi yang diperlukan
+      let estY = 104; // header baseline
+      estY += addrLines.length * 35;
+      if (phone) estY += 33;
+      estY += 34; // dash 1
+      estY += 35 + 33 + 34; // meta (No, Tgl, Plg)
+      estY += 34; // dash 2
+      for (const it of items) {
+        estY += 36; // nama item
+        estY += 34; // qty x harga & subtotal
+      }
+      estY += 34; // dash 3
+      estY += 35; // subtotal
+      if (sale.discountAmount > 0) estY += 32; // diskon
+      estY += 34; // dash 4
+      estY += 38; // TOTAL
+      estY += 36 + 34; // Bayar & Kembali
+      estY += 37; // dash 5
+      estY += footLines.length * 30; // footer
+      estY += 80; // ruang bawah
+
+      // Sesuai contoh struk: minimal 1024px atau menyesuaikan jika item banyak
+      const H = Math.max(1024, estY);
+
+      const cv = document.createElement('canvas');
+      cv.width = W; cv.height = H;
+      const ctx = cv.getContext('2d');
+
+      // Latar belakang putih bersih thermal struk
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, W, H);
+
+      const drawDash = (yPos) => {
+        ctx.save();
+        ctx.setLineDash([6, 4]);
+        ctx.lineWidth = 1.8;
+        ctx.strokeStyle = '#000000';
+        ctx.beginPath();
+        ctx.moveTo(px, yPos);
+        ctx.lineTo(W - px, yPos);
+        ctx.stroke();
+        ctx.restore();
+      };
+
+      ctx.fillStyle = '#000000';
+      let y = 104;
+
+      // Header Toko
+      ctx.textAlign = 'center';
+      ctx.font = '700 23px "JetBrains Mono", monospace';
+      ctx.fillText(shopName, W / 2, y);
+
+      // Alamat Toko
+      ctx.font = '500 17px "JetBrains Mono", monospace';
+      for (const al of addrLines) {
+        y += 35;
+        ctx.fillText(al, W / 2, y);
       }
 
-      // Ringkasan Bawah
-      const sy0 = 958;
-      rr(px, sy0, 410, 148, 16); ctx.fillStyle = '#F8FAFC'; ctx.fill(); ctx.strokeStyle = '#E2E8F0'; ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.textAlign = 'left'; ctx.fillStyle = '#0F172A'; ctx.font = '700 16px "Plus Jakarta Sans", Inter, sans-serif';
-      ctx.fillText(sale.notes ? 'CATATAN PESANAN' : 'INFORMASI', px + 22, sy0 + 38);
-      ctx.fillStyle = '#475569';
-      wrap(sale.notes || 'Terima kasih telah memesan di Percetakan Kobra Hitam.', 366, '400 16px "Plus Jakarta Sans", Inter, sans-serif').slice(0, 4).forEach((ln, i) => ctx.fillText(ln, px + 22, sy0 + 68 + i * 24));
+      // Telepon / WA
+      if (phone) {
+        y += 33;
+        ctx.fillText(phone, W / 2, y);
+      }
 
-      const bx = 520, bw = W - px - bx;
-      rr(bx, sy0, bw, 236, 18); ctx.fillStyle = '#F8FAFC'; ctx.fill(); ctx.strokeStyle = '#E2E8F0'; ctx.lineWidth = 1.5; ctx.stroke();
-      let sy = sy0 + 40;
-      const row = (l, v, b = false, col = '#0F172A') => {
-        ctx.textAlign = 'left'; ctx.fillStyle = b ? '#0F172A' : '#64748B'; ctx.font = `${b ? '700' : '500'} 17px "Plus Jakarta Sans", Inter, sans-serif`; ctx.fillText(l, bx + 24, sy);
-        ctx.textAlign = 'right'; ctx.fillStyle = col; ctx.font = `${b ? '700' : '600'} 18px "JetBrains Mono", monospace`; ctx.fillText(v, bx + bw - 24, sy);
-        sy += 34;
-      };
-      row('Subtotal', rp(sale.subtotal));
-      row('Diskon', sale.discountAmount > 0 ? `- ${rp(sale.discountAmount)}` : 'Rp0', false, sale.discountAmount > 0 ? '#E11D48' : '#64748B');
-      rr(bx + 16, sy - 14, bw - 32, 60, 12); ctx.fillStyle = '#0F172A'; ctx.fill();
-      ctx.textAlign = 'left'; ctx.fillStyle = '#FBBF24'; ctx.font = '800 18px "Plus Jakarta Sans", Inter, sans-serif'; ctx.fillText('TOTAL', bx + 32, sy + 23);
-      ctx.textAlign = 'right'; ctx.fillStyle = '#FFFFFF'; ctx.font = '800 26px "JetBrains Mono", monospace'; ctx.fillText(rp(sale.total), bx + bw - 32, sy + 25);
-      sy += 78;
-      row(`Bayar (${sale.paymentMethod})`, rp(sale.paidAmount));
-      row('Kembalian', rp(sale.changeAmount), true, '#059669');
+      // Garis Pembatas 1
+      y += 34;
+      drawDash(y);
 
-      // Footer
-      ctx.strokeStyle = '#E2E8F0'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px, 1236); ctx.lineTo(W - px, 1236); ctx.stroke();
-      ctx.textAlign = 'center'; ctx.fillStyle = '#475569';
-      wrap(state.settings.footerNote, W - px * 2, '500 15px "Plus Jakarta Sans", Inter, sans-serif').slice(0, 2).forEach((ln, i) => ctx.fillText(ln, W / 2, 1272 + i * 22));
-      ctx.fillStyle = '#94A3B8'; ctx.font = '600 13px "JetBrains Mono", monospace';
-      ctx.fillText(`${state.settings.shopName} • 1080×1350`, W / 2, 1326);
-      ctx.fillStyle = '#F59E0B'; ctx.fillRect(0, H - 8, W, 8);
+      // Metadata Transaksi
+      y += 35;
+      ctx.textAlign = 'left';
+      ctx.font = '500 17px "JetBrains Mono", monospace';
+      ctx.fillText(`No: ${sale.invoiceNo}`, px, y);
+      y += 33;
+      ctx.fillText(`Tgl: ${fmtDT(sale.date)}`, px, y);
+      y += 34;
+      ctx.fillText(`Plg: ${sale.customerName || 'Pelanggan Umum'} (${sale.paymentMethod || 'Tunai'})`, px, y);
+
+      // Garis Pembatas 2
+      y += 34;
+      drawDash(y);
+
+      // Daftar Item Belanja / Jasa
+      for (const it of items) {
+        y += 36;
+        ctx.textAlign = 'left';
+        ctx.font = '700 18px "JetBrains Mono", monospace';
+        let nm = String(it.nama || '');
+        if (ctx.measureText(nm).width > contentW) {
+          while (ctx.measureText(nm + '…').width > contentW && nm.length > 3) {
+            nm = nm.slice(0, -1);
+          }
+          nm += '…';
+        }
+        ctx.fillText(nm, px, y);
+
+        y += 34;
+        ctx.font = '500 17px "JetBrains Mono", monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(`${it.qty} x ${rp(it.harga)}`, px, y);
+        ctx.textAlign = 'right';
+        ctx.fillText(rp(it.subtotal), W - px, y);
+      }
+
+      // Garis Pembatas 3
+      y += 34;
+      drawDash(y);
+
+      // Subtotal & Diskon
+      y += 35;
+      ctx.textAlign = 'left';
+      ctx.font = '500 17px "JetBrains Mono", monospace';
+      ctx.fillText('Subtotal', px, y);
+      ctx.textAlign = 'right';
+      ctx.fillText(rp(sale.subtotal), W - px, y);
+
+      if (sale.discountAmount > 0) {
+        y += 32;
+        ctx.textAlign = 'left';
+        ctx.fillText('Diskon', px, y);
+        ctx.textAlign = 'right';
+        ctx.fillText(`-${rp(sale.discountAmount)}`, W - px, y);
+      }
+
+      // Garis Pembatas 4
+      y += 34;
+      drawDash(y);
+
+      // TOTAL
+      y += 38;
+      ctx.textAlign = 'left';
+      ctx.font = '800 24px "JetBrains Mono", monospace';
+      ctx.fillText('TOTAL', px, y);
+      ctx.textAlign = 'right';
+      ctx.fillText(rp(sale.total), W - px, y);
+
+      // Pembayaran & Kembalian
+      y += 36;
+      ctx.textAlign = 'left';
+      ctx.font = '500 17px "JetBrains Mono", monospace';
+      ctx.fillText('Bayar', px, y);
+      ctx.textAlign = 'right';
+      ctx.fillText(rp(sale.paidAmount), W - px, y);
+
+      y += 34;
+      ctx.textAlign = 'left';
+      ctx.fillText('Kembali', px, y);
+      ctx.textAlign = 'right';
+      ctx.fillText(rp(sale.changeAmount), W - px, y);
+
+      // Garis Pembatas 5
+      y += 37;
+      drawDash(y);
+
+      // Catatan Kaki Nota
+      ctx.textAlign = 'center';
+      ctx.font = '500 15px "JetBrains Mono", monospace';
+      for (const fl of footLines) {
+        y += 30;
+        ctx.fillText(fl, W / 2, y);
+      }
+
       return cv;
     }
 
     async function openReceiptModal(saleId) {
       const s = state.sales.find(x => x.id === saleId);
-      if (!s) return toast('Data nota tidak ditemukan.', 'error');
+      if (!s) return toast('Data transaksi tidak ditemukan.', 'error');
       openModal({
-        title: `Nota ${s.invoiceNo}`,
-        sub: 'Format resmi 1080×1350 (JPEG & PDF) dan cetak struk',
+        title: `Struk ${s.invoiceNo}`,
+        sub: 'Struk Kasir Kobra Hitam',
         width: 'max-w-2xl',
         body: `
           <div class="flex flex-col sm:flex-row gap-5 items-start">
             <div class="w-full sm:w-72 shrink-0 mx-auto">
-              <div id="rcpPreview" class="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 aspect-[4/5] bg-slate-100 flex items-center justify-center text-xs text-slate-400">Memuat nota...</div>
+              <div id="rcpPreview" class="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white shadow-sm flex items-center justify-center p-2 min-h-[360px] max-h-[500px] overflow-y-auto no-scrollbar text-xs text-slate-400">Memuat struk...</div>
             </div>
             <div class="flex-1 w-full space-y-3">
               <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1.5 text-xs">
+                <div class="flex justify-between"><span class="text-slate-400">No. Struk</span><span class="font-mono font-bold">${esc(s.invoiceNo)}</span></div>
                 <div class="flex justify-between"><span class="text-slate-400">Pelanggan</span><span class="font-semibold">${esc(s.customerName)}</span></div>
                 <div class="flex justify-between"><span class="text-slate-400">Metode</span><span class="font-semibold">${esc(s.paymentMethod)}</span></div>
                 <div class="flex justify-between pt-1.5 border-t border-slate-200 dark:border-slate-800"><span class="font-bold">Total</span><span class="font-mono font-bold">${rp(s.total)}</span></div>
               </div>
-              <button onclick="dlReceiptJPG('${s.id}')" class="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition"><i data-lucide="image-down" class="w-4 h-4"></i> Unduh JPEG (1080×1350)</button>
-              <button onclick="dlReceiptPDF('${s.id}')" class="w-full py-2.5 px-4 rounded-xl bg-slate-900 dark:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 hover:opacity-90 transition"><i data-lucide="file-down" class="w-4 h-4"></i> Unduh PDF (1080×1350)</button>
-              <button onclick="printStruk('${s.id}')" class="w-full py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-xs flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition"><i data-lucide="printer" class="w-4 h-4"></i> Cetak Struk</button>
+              <button onclick="printStruk('${s.id}')" class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition shadow-xs"><i data-lucide="printer" class="w-4 h-4"></i> Cetak Struk</button>
+              <button onclick="dlReceiptJPG('${s.id}')" class="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition shadow-xs"><i data-lucide="image-down" class="w-4 h-4"></i> Unduh JPG (Struk)</button>
+              <button onclick="dlReceiptPDF('${s.id}')" class="w-full py-2.5 px-4 rounded-xl bg-slate-900 dark:bg-slate-800 text-white font-semibold text-xs flex items-center justify-center gap-2 hover:opacity-90 transition"><i data-lucide="file-down" class="w-4 h-4"></i> Unduh PDF (Struk)</button>
             </div>
           </div>
         `
       });
       const cv = await drawReceiptCanvas(s);
       const wrap = document.getElementById('rcpPreview');
-      if (wrap) { cv.className = 'w-full h-full object-contain block'; wrap.innerHTML = ''; wrap.appendChild(cv); }
+      if (wrap) {
+        cv.className = 'w-full h-auto object-contain block mx-auto rounded shadow-xs';
+        wrap.innerHTML = '';
+        wrap.appendChild(cv);
+      }
     }
 
     async function dlReceiptJPG(id) {
       const s = state.sales.find(x => x.id === id); if (!s) return;
       const cv = await drawReceiptCanvas(s);
-      const a = document.createElement('a'); a.download = `Nota_${s.invoiceNo}_1080x1350.jpg`; a.href = cv.toDataURL('image/jpeg', 0.96); a.click();
-      toast('Nota JPEG 1080×1350 diunduh.');
+      const a = document.createElement('a');
+      a.download = `Struk_${s.invoiceNo}.jpg`;
+      a.href = cv.toDataURL('image/jpeg', 0.96);
+      a.click();
+      toast('Struk JPG berhasil diunduh.');
     }
 
     async function dlReceiptPDF(id) {
       const s = state.sales.find(x => x.id === id); if (!s) return;
       if (!window.jspdf?.jsPDF) return toast('Library PDF belum termuat.', 'error');
       const cv = await drawReceiptCanvas(s);
-      const doc = new window.jspdf.jsPDF({ orientation: 'portrait', unit: 'px', format: [1080, 1350], hotfixes: ['px_scaling'] });
-      doc.addImage(cv.toDataURL('image/jpeg', 0.96), 'JPEG', 0, 0, 1080, 1350);
-      doc.save(`Nota_${s.invoiceNo}_1080x1350.pdf`);
-      toast('Nota PDF 1080×1350 diunduh.');
+      const doc = new window.jspdf.jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: [cv.width, cv.height],
+        hotfixes: ['px_scaling']
+      });
+      doc.addImage(cv.toDataURL('image/jpeg', 0.96), 'JPEG', 0, 0, cv.width, cv.height);
+      doc.save(`Struk_${s.invoiceNo}.pdf`);
+      toast('Struk PDF berhasil diunduh.');
     }
 
     function printStruk(id) {
       const s = state.sales.find(x => x.id === id); if (!s) return;
+      const addrHtml = (state.settings.address || '').split('\n').map(l => `<div>${esc(l.trim())}</div>`).join('');
+      const footHtml = (state.settings.footerNote || '').split('\n').map(l => `<div>${esc(l.trim())}</div>`).join('');
       document.getElementById('printArea').innerHTML = `
-        <div style="max-width:300px;margin:0 auto;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.5;">
-          <div style="text-align:center;border-bottom:1px dashed #000;padding-bottom:6px;margin-bottom:6px;">
-            <div style="font-weight:800;font-size:14px;">${esc(state.settings.shopName)}</div>
-            <div>${esc(state.settings.address)}</div>
-            <div>${esc(state.settings.phone)}</div>
+        <div style="max-width:320px;margin:0 auto;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.5;color:#000;">
+          <div style="text-align:center;border-bottom:1px dashed #000;padding-bottom:8px;margin-bottom:8px;">
+            <div style="font-weight:800;font-size:14px;letter-spacing:0.5px;">${esc(state.settings.shopName || 'PERCETAKAN KOBRA HITAM')}</div>
+            ${addrHtml}
+            ${state.settings.phone ? `<div>${esc(state.settings.phone)}</div>` : ''}
           </div>
-          <div>No: ${esc(s.invoiceNo)}<br>Tgl: ${fmtDT(s.date)}<br>Plg: ${esc(s.customerName)} (${esc(s.paymentMethod)})</div>
-          <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:6px 0;margin:6px 0;">
-            ${s.items.map(i => `<div><b>${esc(i.nama)}</b><div style="display:flex;justify-content:space-between;"><span>${i.qty} x ${rp(i.harga)}</span><span>${rp(i.subtotal)}</span></div></div>`).join('')}
+          <div style="margin-bottom:8px;">
+            <div>No: ${esc(s.invoiceNo)}</div>
+            <div>Tgl: ${fmtDT(s.date)}</div>
+            <div>Plg: ${esc(s.customerName || 'Pelanggan Umum')} (${esc(s.paymentMethod || 'Tunai')})</div>
           </div>
-          <div style="display:flex;justify-content:space-between;"><span>Subtotal</span><span>${rp(s.subtotal)}</span></div>
-          ${s.discountAmount > 0 ? `<div style="display:flex;justify-content:space-between;"><span>Diskon</span><span>-${rp(s.discountAmount)}</span></div>` : ''}
-          <div style="display:flex;justify-content:space-between;font-weight:800;font-size:13px;border-top:1px dashed #000;padding-top:4px;margin-top:4px;"><span>TOTAL</span><span>${rp(s.total)}</span></div>
-          <div style="display:flex;justify-content:space-between;"><span>Bayar</span><span>${rp(s.paidAmount)}</span></div>
-          <div style="display:flex;justify-content:space-between;"><span>Kembali</span><span>${rp(s.changeAmount)}</span></div>
-          <div style="text-align:center;border-top:1px dashed #000;padding-top:6px;margin-top:8px;font-size:10px;">${esc(state.settings.footerNote)}</div>
+          <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:8px 0;margin:8px 0;">
+            ${s.items.map(i => `
+              <div style="margin-bottom:6px;">
+                <div style="font-weight:700;">${esc(i.nama)}</div>
+                <div style="display:flex;justify-content:space-between;">
+                  <span>${i.qty} x ${rp(i.harga)}</span>
+                  <span>${rp(i.subtotal)}</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span>Subtotal</span>
+            <span>${rp(s.subtotal)}</span>
+          </div>
+          ${s.discountAmount > 0 ? `
+            <div style="display:flex;justify-content:space-between;">
+              <span>Diskon</span>
+              <span>-${rp(s.discountAmount)}</span>
+            </div>
+          ` : ''}
+          <div style="border-top:1px dashed #000;margin:8px 0 6px 0;"></div>
+          <div style="display:flex;justify-content:space-between;font-weight:800;font-size:13px;">
+            <span>TOTAL</span>
+            <span>${rp(s.total)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:2px;">
+            <span>Bayar</span>
+            <span>${rp(s.paidAmount)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:2px;">
+            <span>Kembali</span>
+            <span>${rp(s.changeAmount)}</span>
+          </div>
+          <div style="text-align:center;border-top:1px dashed #000;padding-top:8px;margin-top:8px;font-size:10px;">
+            ${footHtml}
+          </div>
         </div>
       `;
       window.print();
@@ -4406,7 +4536,7 @@
                     <th class="p-3 font-semibold">Ref</th>
                     <th class="p-3 font-semibold">Keterangan</th>
                     <th class="p-3 font-semibold text-right">Nominal</th>
-                    <th class="p-3 font-semibold text-center">Nota</th>
+                    <th class="p-3 font-semibold text-center">Struk</th>
                     <th class="p-3 font-semibold text-center">Aksi</th>
                   </tr>
                 </thead>
@@ -4651,14 +4781,14 @@
               <div class="overflow-x-auto"><table class="w-full text-xs text-left">
                 <thead class="bg-slate-50 dark:bg-slate-900/60 text-slate-500 border-b border-slate-100 dark:border-slate-800">
                   <tr>
-                    <th class="p-3">Nota</th>
+                    <th class="p-3">No. Struk</th>
                     <th class="p-3">Tanggal</th>
                     <th class="p-3">Pelanggan</th>
                     <th class="p-3">Bayar</th>
                     <th class="p-3 text-right">Omzet</th>
                     <th class="p-3 text-right">HPP</th>
                     <th class="p-3 text-right">Laba Kotor</th>
-                    <th class="p-3 text-center">Nota</th>
+                    <th class="p-3 text-center">Struk</th>
                     <th class="p-3 text-center">Aksi</th>
                   </tr>
                 </thead>
@@ -4672,7 +4802,7 @@
                       <td class="p-3 text-right font-mono font-bold text-emerald-600">${rp(s.total)}</td>
                       <td class="p-3 text-right font-mono text-slate-400">${rp(s.totalHpp)}</td>
                       <td class="p-3 text-right font-mono font-semibold text-emerald-600">${rp(s.total - (s.totalHpp || 0))}</td>
-                      <td class="p-3 text-center"><button onclick="openReceiptModal('${s.id}')" class="text-amber-600 dark:text-amber-400 font-semibold hover:underline">PDF/JPG</button></td>
+                      <td class="p-3 text-center"><button onclick="openReceiptModal('${s.id}')" class="text-amber-600 dark:text-amber-400 font-semibold hover:underline">Struk</button></td>
                       <td class="p-3 text-center">
                         <button onclick="deleteSaleFromReport('${s.id}')" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition" title="Hapus transaksi penjualan ini">
                           <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
@@ -4879,18 +5009,18 @@
             </div>
           </div>
 
-          <!-- Form Profil Usaha & Header Nota -->
+          <!-- Form Profil Usaha & Pengaturan Struk Kasir -->
           <form onsubmit="saveSettings(event)" class="lg:col-span-7 bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 space-y-3.5 text-xs shadow-xs">
-            <h3 class="text-sm font-bold">Profil Usaha & Header Nota 1080×1350</h3>
+            <h3 class="text-sm font-bold">Profil Usaha & Pengaturan Struk Kasir</h3>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div class="sm:col-span-2"><label class="block font-semibold mb-1">Nama Percetakan</label><input name="shopName" value="${esc(s.shopName)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
               <div class="sm:col-span-2"><label class="block font-semibold mb-1">Tagline</label><input name="tagline" value="${esc(s.tagline)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
               <div class="sm:col-span-2"><label class="block font-semibold mb-1">Alamat</label><input name="address" value="${esc(s.address)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
               <div><label class="block font-semibold mb-1">Telepon / WA</label><input name="phone" value="${esc(s.phone)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
               <div><label class="block font-semibold mb-1">Instagram / Sosmed</label><input name="instagram" value="${esc(s.instagram)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
-              <div><label class="block font-semibold mb-1">Prefix No. Nota</label><input name="invoicePrefix" value="${esc(s.invoicePrefix)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono" /></div>
+              <div><label class="block font-semibold mb-1">Prefix No. Struk</label><input name="invoicePrefix" value="${esc(s.invoicePrefix)}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono" /></div>
               <div><label class="block font-semibold mb-1">Batas Stok Menipis</label><input name="lowStockThreshold" type="number" value="${s.lowStockThreshold}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono" /></div>
-              <div class="sm:col-span-2"><label class="block font-semibold mb-1">Catatan Kaki Nota</label><textarea name="footerNote" rows="2" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">${esc(s.footerNote)}</textarea></div>
+              <div class="sm:col-span-2"><label class="block font-semibold mb-1">Catatan Kaki Struk</label><textarea name="footerNote" rows="2" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">${esc(s.footerNote)}</textarea></div>
             </div>
             <button type="submit" class="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 font-bold">Simpan Pengaturan</button>
           </form>
