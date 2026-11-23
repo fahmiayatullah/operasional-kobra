@@ -1844,16 +1844,56 @@
             }
           }
         })
-        // 3. Perubahan Stok & Harga Produk Realtime
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'products' }, payload => {
-          const pNew = payload.new;
-          const p = state.products.find(x => x.id === pNew.id);
-          if (p) {
-            p.stok = Number(pNew.stok);
-            p.hargaJual = Number(pNew.harga_jual);
-            if (pNew.custom_price !== undefined) p.customPrice = pNew.custom_price;
-            save();
-            render();
+        // 3. Perubahan Master Barang Realtime (INSERT, UPDATE, DELETE)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, payload => {
+          if (payload.eventType === 'INSERT') {
+            const pNew = payload.new;
+            if (!state.products.some(x => x.id === pNew.id)) {
+              state.products.unshift({
+                id: pNew.id,
+                no: pNew.no,
+                nama: pNew.nama,
+                tanggalPembelian: pNew.tanggal_pembelian || '',
+                deskripsi: pNew.deskripsi || '',
+                stok: Number(pNew.stok) || 0,
+                isiKemasan: pNew.isi_kemasan || '',
+                hargaBeli: Number(pNew.harga_beli) || 0,
+                hargaBeliSatuan: Number(pNew.harga_beli_satuan) || 0,
+                hargaJual: Number(pNew.harga_jual) || 0,
+                customPrice: !!pNew.custom_price,
+                kategoriId: pNew.kategori_id || 'cat_atk',
+                supplier: pNew.supplier || '',
+                aktif: pNew.aktif !== false
+              });
+              save();
+              render();
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            const pNew = payload.new;
+            const p = state.products.find(x => x.id === pNew.id);
+            if (p) {
+              if (pNew.nama) p.nama = pNew.nama;
+              if (pNew.tanggal_pembelian !== undefined) p.tanggalPembelian = pNew.tanggal_pembelian;
+              if (pNew.deskripsi !== undefined) p.deskripsi = pNew.deskripsi;
+              if (pNew.stok !== undefined) p.stok = Number(pNew.stok);
+              if (pNew.isi_kemasan !== undefined) p.isiKemasan = pNew.isi_kemasan;
+              if (pNew.harga_beli !== undefined) p.hargaBeli = Number(pNew.harga_beli) || 0;
+              if (pNew.harga_beli_satuan !== undefined) p.hargaBeliSatuan = Number(pNew.harga_beli_satuan) || 0;
+              if (pNew.harga_jual !== undefined) p.hargaJual = Number(pNew.harga_jual) || 0;
+              if (pNew.custom_price !== undefined) p.customPrice = !!pNew.custom_price;
+              if (pNew.kategori_id) p.kategoriId = pNew.kategori_id;
+              if (pNew.supplier !== undefined) p.supplier = pNew.supplier;
+              if (pNew.aktif !== undefined) p.aktif = pNew.aktif !== false;
+              save();
+              render();
+            }
+          } else if (payload.eventType === 'DELETE') {
+            const delId = payload.old?.id;
+            if (delId) {
+              state.products = state.products.filter(x => x.id !== delId);
+              save();
+              render();
+            }
           }
         })
         .subscribe(status => {
@@ -2083,24 +2123,30 @@
           if (nama && no && !isNaN(parseInt(no, 10))) {
             const noInt = parseInt(no, 10);
             const exist = state.products.find(p => p.nama.toLowerCase() === nama.toLowerCase() || p.no === noInt);
-            // Jika harga diubah secara manual oleh pengguna di web, pertahankan harga manual tersebut!
-            const finalHargaJual = (exist && exist.customPrice && exist.hargaJual > 0) ? exist.hargaJual : (hargaJual || exist?.hargaJual || 0);
+            // Jika data diubah secara manual oleh pengguna di web (customPrice), pertahankan data manual tersebut!
+            const isCustom = !!(exist && exist.customPrice);
+            const finalNama = isCustom && exist.nama ? exist.nama : nama;
+            const finalHargaBeli = isCustom && exist.hargaBeli !== undefined ? exist.hargaBeli : hargaBeli;
+            const finalHargaBeliSatuan = isCustom && exist.hargaBeliSatuan !== undefined ? exist.hargaBeliSatuan : hargaBeliSatuan;
+            const finalHargaJual = isCustom && exist.hargaJual > 0 ? exist.hargaJual : (hargaJual || exist?.hargaJual || 0);
+            const finalDeskripsi = isCustom && exist.deskripsi !== undefined ? exist.deskripsi : deskripsi;
+            const finalKemasan = isCustom && exist.isiKemasan !== undefined ? exist.isiKemasan : isiKemasan;
 
             newProducts.push({
               id: exist?.id || `prd_${String(noInt).padStart(3, '0')}`,
               no: noInt,
-              nama,
+              nama: finalNama,
               tanggalPembelian: tgl || exist?.tanggalPembelian || '',
-              deskripsi,
+              deskripsi: finalDeskripsi,
               stok: isFinite(stok) ? stok : (exist?.stok || 0),
-              isiKemasan,
-              hargaBeli,
-              hargaBeliSatuan,
+              isiKemasan: finalKemasan,
+              hargaBeli: finalHargaBeli,
+              hargaBeliSatuan: finalHargaBeliSatuan,
               hargaJual: finalHargaJual,
-              customPrice: !!(exist && exist.customPrice),
-              kategoriId: guessCat(nama, deskripsi),
-              supplier,
-              aktif: true
+              customPrice: isCustom,
+              kategoriId: exist?.kategoriId || guessCat(finalNama, finalDeskripsi),
+              supplier: exist?.supplier || supplier,
+              aktif: exist ? (exist.aktif !== false) : true
             });
           }
         });
@@ -3775,25 +3821,103 @@
       });
     }
 
-    function saveProd(id) {
+    async function saveProd(id) {
       const fd = new FormData(document.getElementById('fProd'));
       const nama = String(fd.get('nama') || '').trim();
       if (!nama) return toast('Nama barang wajib diisi.', 'warning');
-      const d = { nama, tanggalPembelian: String(fd.get('tanggalPembelian') || '').trim(), kategoriId: fd.get('kategoriId'), deskripsi: String(fd.get('deskripsi') || '').trim(), stok: parseFloat(fd.get('stok')) || 0, isiKemasan: String(fd.get('isiKemasan') || '').trim(), hargaBeli: parseFloat(fd.get('hargaBeli')) || 0, hargaBeliSatuan: parseFloat(fd.get('hargaBeliSatuan')) || 0, hargaJual: parseFloat(fd.get('hargaJual')) || 0, aktif: true };
+      const d = { 
+        nama, 
+        tanggalPembelian: String(fd.get('tanggalPembelian') || '').trim(), 
+        kategoriId: fd.get('kategoriId') || 'cat_atk', 
+        deskripsi: String(fd.get('deskripsi') || '').trim(), 
+        stok: parseFloat(fd.get('stok')) || 0, 
+        isiKemasan: String(fd.get('isiKemasan') || '').trim(), 
+        hargaBeli: parseFloat(fd.get('hargaBeli')) || 0, 
+        hargaBeliSatuan: parseFloat(fd.get('hargaBeliSatuan')) || 0, 
+        hargaJual: parseFloat(fd.get('hargaJual')) || 0, 
+        customPrice: true, 
+        aktif: true 
+      };
+
+      let target = null;
       if (id) {
         const i = state.products.findIndex(x => x.id === id);
         if (i >= 0) {
           const old = Number(state.products[i].stok) || 0;
           state.products[i] = { ...state.products[i], ...d };
+          target = state.products[i];
           if (old !== d.stok) addJournal({ type: 'Penyesuaian Stok', refNo: 'EDIT', description: `Penyesuaian ${d.nama}: ${old} → ${d.stok}`, amount: Math.abs(d.stok - old) * d.hargaBeliSatuan });
         }
-      } else state.products.unshift({ id: uid('prd'), ...d });
-      save(); closeModal(); toast('Data barang disimpan.'); render();
+      } else {
+        const nextNo = (state.products.reduce((max, p) => Math.max(max, Number(p.no) || 0), 0) || 0) + 1;
+        target = { id: uid('prd'), no: nextNo, ...d };
+        state.products.unshift(target);
+      }
+      save(); 
+      closeModal(); 
+      render();
+
+      const client = getSupabase();
+      if (client && target) {
+        toast('Menyimpan perubahan ke database Supabase...', 'info');
+        try {
+          const row = {
+            id: target.id,
+            no: target.no || null,
+            nama: target.nama,
+            tanggal_pembelian: target.tanggalPembelian || '',
+            deskripsi: target.deskripsi || '',
+            stok: Number(target.stok) || 0,
+            isi_kemasan: target.isiKemasan || '',
+            harga_beli: Number(target.hargaBeli) || 0,
+            harga_beli_satuan: Number(target.hargaBeliSatuan) || 0,
+            harga_jual: Number(target.hargaJual) || 0,
+            custom_price: true,
+            kategori_id: target.kategoriId || 'cat_atk',
+            supplier: target.supplier || '',
+            aktif: target.aktif !== false,
+            updated_at: new Date().toISOString()
+          };
+          const { error } = await client.from('products').upsert(row, { onConflict: 'id' });
+          if (error) {
+            console.error('Gagal upsert produk ke Supabase:', error);
+            toast('Peringatan: Gagal sinkron ke database: ' + error.message, 'warning');
+          } else {
+            toast('Data barang berhasil disimpan & terintegrasi ke database!', 'success');
+          }
+        } catch (err) {
+          console.error('Supabase saveProd error:', err);
+          toast('Peringatan: Gagal mengirim ke database: ' + err.message, 'warning');
+        }
+      } else {
+        toast('Data barang disimpan.');
+      }
     }
 
     function delProd(id) {
       const p = state.products.find(x => x.id === id); if (!p) return;
-      confirmDialog('Hapus Barang?', `Hapus "${p.nama}" dari inventaris?`, () => { state.products = state.products.filter(x => x.id !== id); save(); toast('Barang dihapus.', 'info'); render(); }, 'Hapus');
+      confirmDialog('Hapus Barang?', `Hapus "${p.nama}" dari inventaris & database?`, async () => { 
+        state.products = state.products.filter(x => x.id !== id); 
+        save(); 
+        render(); 
+        const client = getSupabase();
+        if (client) {
+          try {
+            const { error } = await client.from('products').delete().eq('id', id);
+            if (error) {
+              console.error('Gagal menghapus produk dari Supabase:', error);
+              toast('Barang dihapus dari lokal, gagal di database: ' + error.message, 'warning');
+            } else {
+              toast('Barang berhasil dihapus dari inventaris & database.', 'info');
+            }
+          } catch (e) {
+            console.error('Supabase delProd error:', e);
+            toast('Barang dihapus.', 'info');
+          }
+        } else {
+          toast('Barang dihapus.', 'info');
+        }
+      }, 'Hapus');
     }
 
     function exportExcel() {

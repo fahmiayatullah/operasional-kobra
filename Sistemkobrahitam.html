@@ -1617,7 +1617,19 @@
       const fd = new FormData(document.getElementById('fProd'));
       const nama = String(fd.get('nama') || '').trim();
       if (!nama) return toast('Nama barang wajib diisi.', 'warning');
-      const d = { nama, tanggalPembelian: String(fd.get('tanggalPembelian') || '').trim(), kategoriId: fd.get('kategoriId'), deskripsi: String(fd.get('deskripsi') || '').trim(), stok: parseFloat(fd.get('stok')) || 0, isiKemasan: String(fd.get('isiKemasan') || '').trim(), hargaBeli: parseFloat(fd.get('hargaBeli')) || 0, hargaBeliSatuan: parseFloat(fd.get('hargaBeliSatuan')) || 0, hargaJual: parseFloat(fd.get('hargaJual')) || 0, aktif: true };
+      const d = { 
+        nama, 
+        tanggalPembelian: String(fd.get('tanggalPembelian') || '').trim(), 
+        kategoriId: fd.get('kategoriId') || 'cat_atk', 
+        deskripsi: String(fd.get('deskripsi') || '').trim(), 
+        stok: parseFloat(fd.get('stok')) || 0, 
+        isiKemasan: String(fd.get('isiKemasan') || '').trim(), 
+        hargaBeli: parseFloat(fd.get('hargaBeli')) || 0, 
+        hargaBeliSatuan: parseFloat(fd.get('hargaBeliSatuan')) || 0, 
+        hargaJual: parseFloat(fd.get('hargaJual')) || 0, 
+        customPrice: true, 
+        aktif: true 
+      };
       if (id) {
         const i = state.products.findIndex(x => x.id === id);
         if (i >= 0) {
@@ -1625,7 +1637,10 @@
           state.products[i] = { ...state.products[i], ...d };
           if (old !== d.stok) addJournal({ type: 'Penyesuaian Stok', refNo: 'EDIT', description: `Penyesuaian ${d.nama}: ${old} → ${d.stok}`, amount: Math.abs(d.stok - old) * d.hargaBeliSatuan });
         }
-      } else state.products.unshift({ id: uid('prd'), ...d });
+      } else {
+        const nextNo = (state.products.reduce((max, p) => Math.max(max, Number(p.no) || 0), 0) || 0) + 1;
+        state.products.unshift({ id: uid('prd'), no: nextNo, ...d });
+      }
       save(); closeModal(); toast('Data barang disimpan.'); render();
     }
 
