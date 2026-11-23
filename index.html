@@ -1896,6 +1896,51 @@
             }
           }
         })
+        // 4. Perubahan Master Layanan Jasa Realtime (INSERT, UPDATE, DELETE)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, payload => {
+          if (payload.eventType === 'INSERT') {
+            const sNew = payload.new;
+            if (!state.services.some(x => x.id === sNew.id)) {
+              state.services.push({
+                id: sNew.id,
+                nama: sNew.nama,
+                satuan: sNew.satuan || 'unit',
+                listrik: Number(sNew.listrik) || 0,
+                jasa: Number(sNew.jasa) || 0,
+                markupPct: Number(sNew.markup_pct) || 50,
+                marginPct: Number(sNew.margin_pct) || 35,
+                hargaJual: Number(sNew.harga_jual) || 0,
+                customPrice: !!sNew.custom_price,
+                aktif: sNew.aktif !== false,
+                bahanItems: Array.isArray(sNew.bahan_items) ? sNew.bahan_items : []
+              });
+              save();
+              render();
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            const sNew = payload.new;
+            const s = state.services.find(x => x.id === sNew.id);
+            if (s) {
+              if (sNew.nama) s.nama = sNew.nama;
+              if (sNew.satuan) s.satuan = sNew.satuan;
+              if (sNew.harga_jual !== undefined) s.hargaJual = Number(sNew.harga_jual) || 0;
+              if (sNew.listrik !== undefined) s.listrik = Number(sNew.listrik) || 0;
+              if (sNew.jasa !== undefined) s.jasa = Number(sNew.jasa) || 0;
+              if (sNew.custom_price !== undefined) s.customPrice = !!sNew.custom_price;
+              if (sNew.aktif !== undefined) s.aktif = sNew.aktif !== false;
+              if (sNew.bahan_items) s.bahanItems = sNew.bahan_items;
+              save();
+              render();
+            }
+          } else if (payload.eventType === 'DELETE') {
+            const delId = payload.old?.id;
+            if (delId) {
+              state.services = state.services.filter(x => x.id !== delId);
+              save();
+              render();
+            }
+          }
+        })
         .subscribe(status => {
           console.log('Supabase Realtime status:', status);
           updateSyncBadgeUI();
@@ -4366,44 +4411,149 @@
     // -------------------------------------------------------------------------
     // 12. PENGELOLAAN HARGA JASA PERCETAKAN (TAMBAH JASA BARU)
     // -------------------------------------------------------------------------
-    function openNewSvcModal() {
+    function openSvcModal(id = '') {
+      const s = id ? state.services.find(x => x.id === id) : null;
+      const curHpp = s ? svcHpp(s).hpp : 0;
       openModal({
-        title: 'Tambah Jasa Percetakan Baru', width: 'max-w-sm',
-        body: `<form id="fSvc" class="space-y-3 text-xs">
-          <div><label class="block font-semibold mb-1">Nama Jasa *</label><input name="nama" placeholder="misal: Cetak Undangan / Banner / Jilid Hardcover" required class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
-          <div class="grid grid-cols-2 gap-2">
-            <div><label class="block font-semibold mb-1">Satuan</label><input name="satuan" value="lembar" placeholder="lembar / buku / pcs" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
-            <div><label class="block font-semibold mb-1">Harga Jual (Rp) *</label><input name="harga" type="number" required value="5000" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold" /></div>
-          </div>
-        </form>`,
-        foot: `<button onclick="closeModal()" class="px-3.5 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700">Batal</button><button onclick="saveNewSvc()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950">Simpan Jasa</button>`
+        title: s ? 'Edit Layanan Jasa Percetakan' : 'Tambah Jasa Percetakan Baru',
+        width: 'max-w-md',
+        body: `
+          <form id="fSvc" class="space-y-3.5 text-xs">
+            <div>
+              <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Nama Layanan Jasa *</label>
+              <input name="nama" value="${esc(s?.nama || '')}" placeholder="misal: Cetak Undangan / Banner Spanduk / Jilid Hardcover" required class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" />
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Satuan Layanan</label>
+                <input name="satuan" value="${esc(s?.satuan || 'lembar')}" placeholder="lembar / buku / pcs / m2 / roll" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" />
+              </div>
+              <div>
+                <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Modal / HPP (Rp)</label>
+                <input name="modalHpp" type="number" step="any" value="${curHpp || 0}" placeholder="0" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono" />
+              </div>
+            </div>
+            <div>
+              <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Harga Jual Aktif (Rp) *</label>
+              <input name="hargaJual" type="number" step="any" required value="${s?.hargaJual ?? 5000}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold text-base text-amber-600 dark:text-amber-400" />
+            </div>
+          </form>
+        `,
+        foot: `
+          <button onclick="closeModal()" class="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700">Batal</button>
+          <button onclick="saveSvc('${id}')" class="px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950">${s ? 'Simpan Perubahan' : 'Tambah Jasa'}</button>
+        `
       });
     }
 
-    function saveNewSvc() {
+    function openNewSvcModal() {
+      openSvcModal('');
+    }
+
+    async function saveSvc(id) {
       const fd = new FormData(document.getElementById('fSvc'));
       const nama = String(fd.get('nama') || '').trim();
       if (!nama) return toast('Nama jasa wajib diisi.', 'warning');
-      const harga = parseFloat(fd.get('harga')) || 0;
       const satuan = String(fd.get('satuan') || 'lembar').trim();
-      const ns = { id: uid('svc'), nama, satuan, aktif: true, hargaJual: harga, customPrice: true, bahanItems: [], listrik: 0, jasa: 0 };
-      state.services.push(ns);
-      save();
+      const hargaJual = parseFloat(fd.get('hargaJual')) || 0;
+      const modalHpp = parseFloat(fd.get('modalHpp')) || 0;
 
-      const client = getSupabase();
-      if (client) {
-        client.from('services').insert({
-          id: ns.id,
-          nama: ns.nama,
-          satuan: ns.satuan,
-          harga_jual: ns.hargaJual,
-          aktif: true
-        }).catch(e => console.error('Supabase service insert error:', e));
+      let targetSvc = null;
+      if (id) {
+        const s = state.services.find(x => x.id === id);
+        if (s) {
+          s.nama = nama;
+          s.satuan = satuan;
+          s.hargaJual = hargaJual;
+          s.customPrice = true;
+          const currentBahan = (s.bahanItems || []).reduce((a, b) => a + (Number(b.biaya) || 0), 0);
+          if (modalHpp > 0) {
+            s.jasa = Math.max(0, modalHpp - currentBahan - (Number(s.listrik) || 0));
+          }
+          targetSvc = s;
+        }
+      } else {
+        targetSvc = {
+          id: uid('svc'),
+          nama,
+          satuan,
+          listrik: 0,
+          jasa: modalHpp,
+          markupPct: 50,
+          marginPct: 35,
+          hargaJual,
+          customPrice: true,
+          aktif: true,
+          bahanItems: []
+        };
+        state.services.push(targetSvc);
       }
 
+      save();
       closeModal();
-      toast(`Jasa "${ns.nama}" berhasil ditambahkan.`);
       render();
+
+      const client = getSupabase();
+      if (client && targetSvc) {
+        toast('Menyimpan jasa ke database Supabase...', 'info');
+        try {
+          const row = {
+            id: targetSvc.id,
+            nama: targetSvc.nama,
+            satuan: targetSvc.satuan,
+            listrik: Number(targetSvc.listrik) || 0,
+            jasa: Number(targetSvc.jasa) || 0,
+            markup_pct: Number(targetSvc.markupPct) || 50,
+            margin_pct: Number(targetSvc.marginPct) || 35,
+            harga_jual: Number(targetSvc.hargaJual) || 0,
+            custom_price: true,
+            aktif: targetSvc.aktif !== false,
+            resep: [],
+            bahan_items: targetSvc.bahanItems || [],
+            updated_at: new Date().toISOString()
+          };
+          const { error } = await client.from('services').upsert(row, { onConflict: 'id' });
+          if (error) {
+            console.error('Supabase saveSvc error:', error);
+            toast('Peringatan: Jasa disimpan lokal, gagal sinkron database: ' + error.message, 'warning');
+          } else {
+            toast(`Layanan jasa "${targetSvc.nama}" berhasil disimpan & terintegrasi ke Supabase!`, 'success');
+          }
+        } catch (err) {
+          console.error('Supabase saveSvc error:', err);
+          toast('Peringatan: Gagal mengirim ke Supabase: ' + err.message, 'warning');
+        }
+      } else {
+        toast(`Layanan jasa "${targetSvc.nama}" berhasil disimpan.`);
+      }
+    }
+
+    function delSvc(id) {
+      const s = state.services.find(x => x.id === id);
+      if (!s) return;
+      confirmDialog('Hapus Layanan Jasa?', `Hapus jasa "${s.nama}" dari katalog harga & database Supabase?`, async () => {
+        state.services = state.services.filter(x => x.id !== id);
+        save();
+        render();
+
+        const client = getSupabase();
+        if (client) {
+          try {
+            const { error } = await client.from('services').delete().eq('id', id);
+            if (error) {
+              console.error('Gagal menghapus jasa dari Supabase:', error);
+              toast('Jasa dihapus dari lokal, gagal database: ' + error.message, 'warning');
+            } else {
+              toast(`Jasa "${s.nama}" berhasil dihapus dari katalog & Supabase.`, 'info');
+            }
+          } catch (e) {
+            console.error('Supabase delSvc error:', e);
+            toast('Jasa dihapus dari lokal.', 'info');
+          }
+        } else {
+          toast(`Jasa "${s.nama}" dihapus.`, 'info');
+        }
+      }, 'Hapus Jasa');
     }
 
     // -------------------------------------------------------------------------
@@ -4423,10 +4573,16 @@
               </button>
             </div>
             <div class="flex items-center gap-2">
-              <button onclick="openNewSvcModal()" class="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-xs transition" title="Tambah Jasa Percetakan Baru">
-                <i data-lucide="plus" class="w-3.5 h-3.5"></i> + Jasa Baru
-              </button>
-              <button onclick="saveAllPricesManual()" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition" title="Simpan permanen ke penyimpanan browser">
+              ${ui.priceTab === 'jasa' ? `
+                <button onclick="openSvcModal()" class="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-xs transition" title="Tambah Jasa Percetakan Baru">
+                  <i data-lucide="plus" class="w-3.5 h-3.5"></i> + Tambah Jasa
+                </button>
+              ` : `
+                <button onclick="openProdModal()" class="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-xs transition" title="Tambah Barang Inventaris Baru">
+                  <i data-lucide="plus" class="w-3.5 h-3.5"></i> + Tambah Barang
+                </button>
+              `}
+              <button onclick="saveAllPricesManual()" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition" title="Simpan permanen ke penyimpanan browser & database Supabase">
                 <i data-lucide="check" class="w-3.5 h-3.5"></i> Simpan Perubahan Harga
               </button>
               <button onclick="resetPricesToSpreadsheet()" class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#111623] text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-white transition" title="Kembalikan seluruh harga ke nilai asli dari Google Spreadsheet">
@@ -4439,56 +4595,79 @@
           </div>
 
           <div class="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 text-[11px] text-amber-800 dark:text-amber-300 flex items-center justify-between">
-            <span>💡 <b>Tips:</b> Anda bisa langsung mengetik angka harga jual baru di kolom input bawah. Angka otomatis tersimpan secara instan di browser dan tidak akan hilang saat di-refresh.</span>
+            <span>💡 <b>Tips:</b> Anda bisa langsung mengetik angka harga jual baru di kolom input bawah atau menekan tombol <b>Edit/Hapus</b> di kolom Aksi. Data otomatis tersimpan dan terintegrasi dengan database Supabase Cloud.</span>
           </div>
 
           <!-- Tabel Harga -->
           <div class="bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden shadow-xs">
-            ${ui.priceTab === 'jasa' ? `
-              <table class="w-full text-xs text-left">
-                <thead class="bg-slate-50 dark:bg-slate-900/60 text-slate-500 border-b border-slate-100 dark:border-slate-800">
-                  <tr>
-                    <th class="p-3 font-semibold">Layanan Jasa Percetakan</th>
-                    <th class="p-3 font-semibold">Satuan</th>
-                    <th class="p-3 font-semibold text-right">Modal / HPP</th>
-                    <th class="p-3 font-semibold text-right">Harga Jual Aktif (Edit Langsung)</th>
-                    <th class="p-3 font-semibold text-right">Estimasi Laba / Unit</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-                  ${state.services.map(s => {
-                    const h = svcHpp(s).hpp;
-                    const laba = (Number(s.hargaJual) || 0) - h;
-                    return `
-                      <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition">
-                        <td class="p-3 font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                          <span>${esc(s.nama)}</span>
-                          ${s.customPrice ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400">Manual</span>' : ''}
-                        </td>
-                        <td class="p-3 text-slate-400">${esc(s.satuan)}</td>
-                        <td class="p-3 text-right font-mono text-slate-500">${rp(h)}</td>
-                        <td class="p-3 text-right">
-                          <div class="inline-flex items-center gap-1">
-                            <span class="text-slate-400 font-mono text-xs">Rp</span>
-                            <input
-                              type="number"
-                              step="any"
-                              value="${s.hargaJual}"
-                              oninput="updateSvcPriceLive('${s.id}', this.value)"
-                              class="w-32 text-right px-2.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                              placeholder="0"
-                            />
-                          </div>
-                        </td>
-                        <td class="p-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400" id="laba_${s.id}">
-                          ${rp(laba)}
-                        </td>
-                      </tr>
-                    `;
-                  }).join('')}
-                </tbody>
-              </table>
-            ` : (!state.products.length ? `<p class="p-10 text-center text-xs text-slate-400">Belum ada data barang.</p>` : `
+            ${ui.priceTab === 'jasa' ? (!state.services.length ? `
+              <div class="p-12 text-center space-y-3">
+                <p class="text-sm font-bold text-slate-800 dark:text-slate-200">Belum Ada Layanan Jasa</p>
+                <p class="text-xs text-slate-400">Tambahkan jasa percetakan seperti Fotokopi, Print, Banner, Jilid, dll.</p>
+                <button onclick="openSvcModal()" class="px-4 py-2 rounded-xl bg-amber-500 text-slate-950 text-xs font-bold">+ Tambah Jasa Sekarang</button>
+              </div>
+            ` : `
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs text-left">
+                  <thead class="bg-slate-50 dark:bg-slate-900/60 text-slate-500 border-b border-slate-100 dark:border-slate-800">
+                    <tr>
+                      <th class="p-3 font-semibold">Layanan Jasa Percetakan</th>
+                      <th class="p-3 font-semibold">Satuan</th>
+                      <th class="p-3 font-semibold text-right">Modal / HPP</th>
+                      <th class="p-3 font-semibold text-right">Harga Jual Aktif (Edit Langsung)</th>
+                      <th class="p-3 font-semibold text-right">Estimasi Laba / Unit</th>
+                      <th class="p-3 font-semibold text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                    ${state.services.map(s => {
+                      const h = svcHpp(s).hpp;
+                      const laba = (Number(s.hargaJual) || 0) - h;
+                      return `
+                        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition">
+                          <td class="p-3 font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                            <span>${esc(s.nama)}</span>
+                            ${s.customPrice ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400">Manual</span>' : ''}
+                          </td>
+                          <td class="p-3 text-slate-400">${esc(s.satuan)}</td>
+                          <td class="p-3 text-right font-mono text-slate-500">${rp(h)}</td>
+                          <td class="p-3 text-right">
+                            <div class="inline-flex items-center gap-1">
+                              <span class="text-slate-400 font-mono text-xs">Rp</span>
+                              <input
+                                type="number"
+                                step="any"
+                                value="${s.hargaJual}"
+                                oninput="updateSvcPriceLive('${s.id}', this.value)"
+                                class="w-32 text-right px-2.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                                placeholder="0"
+                              />
+                            </div>
+                          </td>
+                          <td class="p-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400" id="laba_${s.id}">
+                            ${rp(laba)}
+                          </td>
+                          <td class="p-3 text-center whitespace-nowrap">
+                            <button onclick="openSvcModal('${s.id}')" class="p-1.5 text-slate-400 hover:text-amber-500 transition" title="Edit Jasa">
+                              <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                            </button>
+                            <button onclick="delSvc('${s.id}')" class="p-1.5 text-slate-400 hover:text-rose-500 transition" title="Hapus Jasa">
+                              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            </button>
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+            `) : (!state.products.length ? `
+              <div class="p-12 text-center space-y-3">
+                <p class="text-sm font-bold text-slate-800 dark:text-slate-200">Belum Ada Barang Inventaris</p>
+                <p class="text-xs text-slate-400">Tambahkan barang ATK atau stok percetakan baru.</p>
+                <button onclick="openProdModal()" class="px-4 py-2 rounded-xl bg-amber-500 text-slate-950 text-xs font-bold">+ Tambah Barang Sekarang</button>
+              </div>
+            ` : `
               <div class="overflow-x-auto">
                 <table class="w-full text-xs text-left">
                   <thead class="bg-slate-50 dark:bg-slate-900/60 text-slate-500 border-b border-slate-100 dark:border-slate-800">
@@ -4498,6 +4677,7 @@
                       <th class="p-3 font-semibold text-right">Modal / Beli Satuan</th>
                       <th class="p-3 font-semibold text-right">Harga Jual Toko (Edit Langsung)</th>
                       <th class="p-3 font-semibold text-right">Margin Keuntungan</th>
+                      <th class="p-3 font-semibold text-center">Aksi</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
@@ -4526,6 +4706,14 @@
                           </td>
                           <td class="p-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400" id="margin_${p.id}">
                             ${rp(margin)}
+                          </td>
+                          <td class="p-3 text-center whitespace-nowrap">
+                            <button onclick="openProdModal('${p.id}')" class="p-1.5 text-slate-400 hover:text-amber-500 transition" title="Edit Barang">
+                              <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                            </button>
+                            <button onclick="delProd('${p.id}')" class="p-1.5 text-slate-400 hover:text-rose-500 transition" title="Hapus Barang">
+                              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            </button>
                           </td>
                         </tr>
                       `;
@@ -5277,6 +5465,25 @@
                 meta: j.meta || {}
               }));
               await client.from('journal').upsert(jRows, { onConflict: 'id' });
+            }
+
+            // 4. Upload Layanan Jasa (Services)
+            if (state.services.length) {
+              const svcRows = state.services.map(s => ({
+                id: s.id,
+                nama: s.nama,
+                satuan: s.satuan || 'unit',
+                listrik: Number(s.listrik) || 0,
+                jasa: Number(s.jasa) || 0,
+                markup_pct: Number(s.markupPct) || 50,
+                margin_pct: Number(s.marginPct) || 35,
+                harga_jual: Number(s.hargaJual) || 0,
+                custom_price: !!s.customPrice,
+                aktif: s.aktif !== false,
+                resep: [],
+                bahan_items: s.bahanItems || []
+              }));
+              await client.from('services').upsert(svcRows, { onConflict: 'id' });
             }
 
             toast('Migrasi Berhasil! Seluruh data Anda kini berada di Supabase Cloud.', 'success');

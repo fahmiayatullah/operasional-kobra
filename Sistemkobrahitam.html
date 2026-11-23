@@ -1947,22 +1947,96 @@
       const def = defaultServices().find(x => x.id === id), i = state.services.findIndex(x => x.id === id);
       if (def && i >= 0) { state.services[i] = { ...state.services[i], bahanItems: def.bahanItems, listrik: def.listrik, jasa: def.jasa }; save(); toast('HPP dikembalikan ke standar.'); render(); }
     }
-    function openNewSvcModal() {
+    function openSvcModal(id = '') {
+      const s = id ? state.services.find(x => x.id === id) : null;
+      const curHpp = s ? svcHpp(s).hpp : 0;
       openModal({
-        title: 'Tambah Jasa Baru', width: 'max-w-sm',
-        body: `<form id="fSvc" class="space-y-3 text-xs">
-          <div><label class="block font-semibold mb-1">Nama Jasa *</label><input name="nama" required class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div>
-          <div class="grid grid-cols-2 gap-2"><div><label class="block font-semibold mb-1">Satuan</label><input name="satuan" value="lembar" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" /></div><div><label class="block font-semibold mb-1">Harga Jual</label><input name="harga" type="number" value="5000" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono" /></div></div>
-          <div class="grid grid-cols-3 gap-2"><div><label class="block font-semibold mb-1">Bahan</label><input name="b" type="number" value="1000" class="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono" /></div><div><label class="block font-semibold mb-1">Listrik</label><input name="l" type="number" value="200" class="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono" /></div><div><label class="block font-semibold mb-1">Jasa</label><input name="j" type="number" value="500" class="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono" /></div></div>
-        </form>`,
-        foot: `<button onclick="closeModal()" class="px-3.5 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700">Batal</button><button onclick="saveNewSvc()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950">Simpan</button>`
+        title: s ? 'Edit Layanan Jasa Percetakan' : 'Tambah Jasa Percetakan Baru',
+        width: 'max-w-md',
+        body: `
+          <form id="fSvc" class="space-y-3.5 text-xs">
+            <div>
+              <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Nama Layanan Jasa *</label>
+              <input name="nama" value="${esc(s?.nama || '')}" placeholder="misal: Cetak Undangan / Banner Spanduk / Jilid Hardcover" required class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" />
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Satuan Layanan</label>
+                <input name="satuan" value="${esc(s?.satuan || 'lembar')}" placeholder="lembar / buku / pcs / m2 / roll" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900" />
+              </div>
+              <div>
+                <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Modal / HPP (Rp)</label>
+                <input name="modalHpp" type="number" step="any" value="${curHpp || 0}" placeholder="0" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono" />
+              </div>
+            </div>
+            <div>
+              <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Harga Jual Aktif (Rp) *</label>
+              <input name="hargaJual" type="number" step="any" required value="${s?.hargaJual ?? 5000}" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold text-base text-amber-600 dark:text-amber-400" />
+            </div>
+          </form>
+        `,
+        foot: `
+          <button onclick="closeModal()" class="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700">Batal</button>
+          <button onclick="saveSvc('${id}')" class="px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950">${s ? 'Simpan Perubahan' : 'Tambah Jasa'}</button>
+        `
       });
     }
-    function saveNewSvc() {
+
+    function openNewSvcModal() {
+      openSvcModal('');
+    }
+
+    function saveSvc(id) {
       const fd = new FormData(document.getElementById('fSvc'));
-      const nama = String(fd.get('nama') || '').trim(); if (!nama) return toast('Nama jasa wajib diisi.', 'warning');
-      const ns = { id: uid('svc'), nama, satuan: fd.get('satuan') || 'unit', aktif: true, bahanItems: [{ id: uid('b'), nama: 'Bahan Utama', biaya: parseFloat(fd.get('b')) || 0 }], listrik: parseFloat(fd.get('l')) || 0, jasa: parseFloat(fd.get('j')) || 0, markupPct: 50, marginPct: 35, hargaJual: parseFloat(fd.get('harga')) || 0, resep: [] };
-      state.services.push(ns); ui.hpp.svcId = ns.id; save(); closeModal(); toast('Jasa baru ditambahkan.'); render();
+      const nama = String(fd.get('nama') || '').trim();
+      if (!nama) return toast('Nama jasa wajib diisi.', 'warning');
+      const satuan = String(fd.get('satuan') || 'lembar').trim();
+      const hargaJual = parseFloat(fd.get('hargaJual')) || 0;
+      const modalHpp = parseFloat(fd.get('modalHpp')) || 0;
+
+      if (id) {
+        const s = state.services.find(x => x.id === id);
+        if (s) {
+          s.nama = nama;
+          s.satuan = satuan;
+          s.hargaJual = hargaJual;
+          s.customPrice = true;
+          const currentBahan = (s.bahanItems || []).reduce((a, b) => a + (Number(b.biaya) || 0), 0);
+          if (modalHpp > 0) {
+            s.jasa = Math.max(0, modalHpp - currentBahan - (Number(s.listrik) || 0));
+          }
+        }
+      } else {
+        const ns = {
+          id: uid('svc'),
+          nama,
+          satuan,
+          listrik: 0,
+          jasa: modalHpp,
+          markupPct: 50,
+          marginPct: 35,
+          hargaJual,
+          customPrice: true,
+          aktif: true,
+          bahanItems: []
+        };
+        state.services.push(ns);
+      }
+      save();
+      closeModal();
+      toast('Layanan jasa berhasil disimpan.');
+      render();
+    }
+
+    function delSvc(id) {
+      const s = state.services.find(x => x.id === id);
+      if (!s) return;
+      confirmDialog('Hapus Layanan Jasa?', `Hapus jasa "${s.nama}" dari katalog harga?`, () => {
+        state.services = state.services.filter(x => x.id !== id);
+        save();
+        toast(`Jasa "${s.nama}" dihapus.`, 'info');
+        render();
+      }, 'Hapus Jasa');
     }
 
     // -------------------------------------------------------------------------
@@ -2015,22 +2089,74 @@
               <button onclick="ui.priceTab='jasa'; render()" class="px-3.5 py-2 rounded-xl text-xs font-semibold ${ui.priceTab === 'jasa' ? 'bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950' : 'bg-white dark:bg-[#111623] border border-slate-200 dark:border-slate-800'}">Jasa (${state.services.length})</button>
               <button onclick="ui.priceTab='barang'; render()" class="px-3.5 py-2 rounded-xl text-xs font-semibold ${ui.priceTab === 'barang' ? 'bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950' : 'bg-white dark:bg-[#111623] border border-slate-200 dark:border-slate-800'}">Barang (${state.products.length})</button>
             </div>
-            <button onclick="printPrices()" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#111623] text-xs font-semibold flex items-center gap-1.5"><i data-lucide="printer" class="w-3.5 h-3.5"></i> Cetak Daftar Harga</button>
+            <div class="flex items-center gap-2">
+              ${ui.priceTab === 'jasa' ? `
+                <button onclick="openSvcModal()" class="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 text-xs font-bold flex items-center gap-1.5"><i data-lucide="plus" class="w-3.5 h-3.5"></i> + Tambah Jasa</button>
+              ` : `
+                <button onclick="openProdModal()" class="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 text-xs font-bold flex items-center gap-1.5"><i data-lucide="plus" class="w-3.5 h-3.5"></i> + Tambah Barang</button>
+              `}
+              <button onclick="printPrices()" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#111623] text-xs font-semibold flex items-center gap-1.5"><i data-lucide="printer" class="w-3.5 h-3.5"></i> Cetak Daftar Harga</button>
+            </div>
           </div>
 
           <div class="bg-white dark:bg-[#111623] rounded-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden">
             ${ui.priceTab === 'jasa' ? `
               <table class="w-full text-xs text-left">
-                <thead class="bg-slate-50 dark:bg-slate-900/60 text-slate-500"><tr><th class="p-3">Layanan Jasa</th><th class="p-3">Satuan</th><th class="p-3 text-right">HPP</th><th class="p-3 text-right">Harga Jual (Edit)</th><th class="p-3 text-right">Laba/Unit</th></tr></thead>
+                <thead class="bg-slate-50 dark:bg-slate-900/60 text-slate-500">
+                  <tr>
+                    <th class="p-3">Layanan Jasa</th>
+                    <th class="p-3">Satuan</th>
+                    <th class="p-3 text-right">HPP</th>
+                    <th class="p-3 text-right">Harga Jual (Edit)</th>
+                    <th class="p-3 text-right">Laba/Unit</th>
+                    <th class="p-3 text-center">Aksi</th>
+                  </tr>
+                </thead>
                 <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-                  ${state.services.map(s => { const h = svcHpp(s).hpp; return `<tr><td class="p-3 font-semibold">${esc(s.nama)}</td><td class="p-3 text-slate-400">${esc(s.satuan)}</td><td class="p-3 text-right font-mono text-slate-400">${rp(h)}</td><td class="p-3 text-right"><input type="number" value="${s.hargaJual}" onchange="applySvcPrice('${s.id}',parseFloat(this.value)||0)" class="w-28 text-right px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold" /></td><td class="p-3 text-right font-mono font-semibold text-emerald-600">${rp(s.hargaJual - h)}</td></tr>`; }).join('')}
+                  ${state.services.map(s => {
+                    const h = svcHpp(s).hpp;
+                    return `
+                      <tr>
+                        <td class="p-3 font-semibold">${esc(s.nama)}</td>
+                        <td class="p-3 text-slate-400">${esc(s.satuan)}</td>
+                        <td class="p-3 text-right font-mono text-slate-400">${rp(h)}</td>
+                        <td class="p-3 text-right"><input type="number" value="${s.hargaJual}" onchange="applySvcPrice('${s.id}',parseFloat(this.value)||0)" class="w-28 text-right px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold" /></td>
+                        <td class="p-3 text-right font-mono font-semibold text-emerald-600">${rp(s.hargaJual - h)}</td>
+                        <td class="p-3 text-center whitespace-nowrap">
+                          <button onclick="openSvcModal('${s.id}')" class="p-1.5 text-slate-400 hover:text-amber-500"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                          <button onclick="delSvc('${s.id}')" class="p-1.5 text-slate-400 hover:text-rose-500"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
                 </tbody>
               </table>
             ` : (!state.products.length ? `<p class="p-10 text-center text-xs text-slate-400">Belum ada data barang.</p>` : `
               <div class="overflow-x-auto"><table class="w-full text-xs text-left">
-                <thead class="bg-slate-50 dark:bg-slate-900/60 text-slate-500"><tr><th class="p-3">Nama Barang</th><th class="p-3">Kemasan</th><th class="p-3 text-right">Beli Satuan</th><th class="p-3 text-right">Harga Jual (Edit)</th><th class="p-3 text-right">Margin</th></tr></thead>
+                <thead class="bg-slate-50 dark:bg-slate-900/60 text-slate-500">
+                  <tr>
+                    <th class="p-3">Nama Barang</th>
+                    <th class="p-3">Kemasan</th>
+                    <th class="p-3 text-right">Beli Satuan</th>
+                    <th class="p-3 text-right">Harga Jual (Edit)</th>
+                    <th class="p-3 text-right">Margin</th>
+                    <th class="p-3 text-center">Aksi</th>
+                  </tr>
+                </thead>
                 <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-                  ${state.products.map(p => `<tr><td class="p-3 font-semibold">${esc(p.nama)}</td><td class="p-3 text-slate-400">${esc(p.isiKemasan || '-')}</td><td class="p-3 text-right font-mono text-slate-400">${rp(p.hargaBeliSatuan)}</td><td class="p-3 text-right"><input type="number" value="${p.hargaJual}" onchange="const x=state.products.find(z=>z.id==='${p.id}'); if(x){x.hargaJual=parseFloat(this.value)||0; save(); toast('Harga diperbarui.'); render();}" class="w-28 text-right px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold" /></td><td class="p-3 text-right font-mono font-semibold text-emerald-600">${rp((p.hargaJual || 0) - (p.hargaBeliSatuan || 0))}</td></tr>`).join('')}
+                  ${state.products.map(p => `
+                    <tr>
+                      <td class="p-3 font-semibold">${esc(p.nama)}</td>
+                      <td class="p-3 text-slate-400">${esc(p.isiKemasan || '-')}</td>
+                      <td class="p-3 text-right font-mono text-slate-400">${rp(p.hargaBeliSatuan)}</td>
+                      <td class="p-3 text-right"><input type="number" value="${p.hargaJual}" onchange="const x=state.products.find(z=>z.id==='${p.id}'); if(x){x.hargaJual=parseFloat(this.value)||0; save(); toast('Harga diperbarui.'); render();}" class="w-28 text-right px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono font-bold" /></td>
+                      <td class="p-3 text-right font-mono font-semibold text-emerald-600">${rp((p.hargaJual || 0) - (p.hargaBeliSatuan || 0))}</td>
+                      <td class="p-3 text-center whitespace-nowrap">
+                        <button onclick="openProdModal('${p.id}')" class="p-1.5 text-slate-400 hover:text-amber-500"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                        <button onclick="delProd('${p.id}')" class="p-1.5 text-slate-400 hover:text-rose-500"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                      </td>
+                    </tr>
+                  `).join('')}
                 </tbody>
               </table></div>
             `)}
