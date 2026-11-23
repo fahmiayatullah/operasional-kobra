@@ -1615,12 +1615,12 @@
     function defaultState() {
       return {
         settings: {
-          shopName: 'PERCETAKAN KOBRA HITAM',
-          tagline: 'Cetak Cepat, Rapi & Berkualitas',
-          address: 'Jl. Percetakan Raya No. 88, Surabaya',
-          phone: '0812-3456-7890',
+          shopName: 'Stationary and Advertising Kobra Hitam',
+          tagline: 'Kobra Hitam Banyak Bisa-nya',
+          address: 'Jemurwonosari, Gg. Sekolahan, No. 123',
+          phone: '082228728720',
           instagram: '@percetakankobrahitam',
-          footerNote: 'Terima kasih atas kepercayaan Anda. Simpan nota ini sebagai bukti pembayaran resmi.',
+          footerNote: 'Terima kasih atas kepercayaan Anda. Simpan struk ini sebagai bukti pembayaran resmi.',
           invoicePrefix: 'KH',
           invoiceCounter: 1,
           lowStockThreshold: 10,
@@ -1662,6 +1662,10 @@
         if (!raw) return d;
         const p = JSON.parse(raw);
         const s = p.settings || {};
+        if (!s.shopName || s.shopName === 'PERCETAKAN KOBRA HITAM') s.shopName = 'Stationary and Advertising Kobra Hitam';
+        if (!s.tagline || s.tagline === 'Cetak Cepat, Rapi & Berkualitas') s.tagline = 'Kobra Hitam Banyak Bisa-nya';
+        if (!s.address || s.address === 'Jl. Percetakan Raya No. 88, Surabaya' || s.address.includes('Percetakan Raya')) s.address = 'Jemurwonosari, Gg. Sekolahan, No. 123';
+        if (!s.phone || s.phone === '0812-3456-7890') s.phone = '082228728720';
         return {
           settings: {
             ...d.settings,
@@ -3346,10 +3350,10 @@
       const contentW = W - px * 2; // 558
 
       const settings = state.settings || {};
-      const shopName = String(settings.shopName || 'PERCETAKAN KOBRA HITAM').trim();
-      const address = String(settings.address || '').trim();
-      const phone = String(settings.phone || '').trim();
-      const footerNote = String(settings.footerNote || 'Terima kasih atas kepercayaan Anda. Simpan\nnota ini sebagai bukti pembayaran resmi.').trim();
+      const shopName = String(settings.shopName || 'Stationary and Advertising Kobra Hitam').trim();
+      const address = String(settings.address || 'Jemurwonosari, Gg. Sekolahan, No. 123').trim();
+      const phone = String(settings.phone || '082228728720').trim();
+      const footerNote = String(settings.footerNote || 'Terima kasih atas kepercayaan Anda. Simpan\nstruk ini sebagai bukti pembayaran resmi.').trim();
 
       // Helper pemecah teks per baris dan pembungkus kata
       const wrapText = (txt, mw, font, ctxTemp) => {
@@ -3616,7 +3620,7 @@
       document.getElementById('printArea').innerHTML = `
         <div style="max-width:320px;margin:0 auto;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.5;color:#000;">
           <div style="text-align:center;border-bottom:1px dashed #000;padding-bottom:8px;margin-bottom:8px;">
-            <div style="font-weight:800;font-size:14px;letter-spacing:0.5px;">${esc(state.settings.shopName || 'PERCETAKAN KOBRA HITAM')}</div>
+            <div style="font-weight:800;font-size:14px;letter-spacing:0.5px;">${esc(state.settings.shopName || 'Stationary and Advertising Kobra Hitam')}</div>
             ${addrHtml}
             ${state.settings.phone ? `<div>${esc(state.settings.phone)}</div>` : ''}
           </div>
@@ -5228,7 +5232,7 @@
       e.preventDefault();
       const fd = new FormData(e.target);
       Object.assign(state.settings, {
-        shopName: String(fd.get('shopName') || '').trim() || 'PERCETAKAN KOBRA HITAM',
+        shopName: String(fd.get('shopName') || '').trim() || 'Stationary and Advertising Kobra Hitam',
         tagline: String(fd.get('tagline') || '').trim(),
         address: String(fd.get('address') || '').trim(),
         phone: String(fd.get('phone') || '').trim(),
